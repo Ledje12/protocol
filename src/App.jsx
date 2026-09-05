@@ -1111,11 +1111,18 @@ function CalibrationReady({
         </div>
 
         <button
-  className="primary"
-  onClick={onStart}
->
-  Commencer THE PACT
-</button>
+          className="primary"
+          onClick={onStart}
+        >
+          Commencer THE PACT
+        </button>
+
+        <button
+          className="secondary"
+          onClick={onDebug}
+        >
+          DEBUG ACTIONS
+        </button>
       </section>
     </main>
   )
