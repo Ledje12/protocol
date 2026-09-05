@@ -1553,12 +1553,21 @@ if (screen === 'act1-reveal') {
   )
 }
 
+if (screen === 'act2-intro') {
   return (
-    <Home
-      onCreate={createGame}
-      onJoin={() => setScreen('join')}
+    <ActTwoIntro
+      gameCode={gameCode}
+      playerNo={playerNo}
     />
   )
+}
+
+return (
+  <Home
+    onCreate={createGame}
+    onJoin={() => setScreen('join')}
+  />
+)
 }
 
 export default App
