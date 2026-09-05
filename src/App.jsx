@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import './App.css'
 import { supabase } from './supabase'
+import { useEffect, useRef, useState } from 'react'
 
 function generateGameCode() {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
@@ -751,8 +752,227 @@ function SecretObjective({
     setConfirming(true)
     setErrorMessage('')
 
+    create or replace function public.confirm_secret_objective(
+  p_game_code text,
+  p_player_no integer
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+
+declare
+  v_game public.games%rowtype;
+
+begin
+
+  if p_player_no not in (1, 2) then
+    raise exception 'Invalid player number';
+  end if;
+
+  if p_player_no = 1 then
+
+    update public.games
+    set player1_ready = true
+    where code = upper(p_game_code);
+
+  else
+
+    update public.games
+    set player2_ready = true
+    where code = upper(p_game_code);
+
+  end if;
+
+
+  select *
+  into v_game
+  from public.games
+  where code = upper(p_game_code)
+  limit 1;
+
+
+  if v_game.id is null then
+    raise exception 'Game not found';
+  end if;
+
+
+  if v_game.player1_ready and v_game.player2_ready then
+
+    update public.games
+    set
+      status = 'act1_live',
+      act_started_at = now(),
+      player1_act1_done = false,
+      player2_act1_done = false,
+      act1_finished = false,
+      act1_advantage = null
+    where id = v_game.id;
+
+    return jsonb_build_object(
+      'ready', true,
+      'both_ready', true
+    );
+
+  end if;
+
+
+  return jsonb_build_object(
+    'ready', true,
+    'both_ready', false
+  );
+
+end;
+
+$$;
+
+function ActOneLive({
+  gameCode,
+  playerNo,
+  onReveal,
+}) {
+  const DURATION = 30
+
+  const [remaining, setRemaining] = useState(DURATION)
+  const [objectiveDone, setObjectiveDone] = useState(false)
+  const [loading, setLoading] = useState(true)
+  const [submitting, setSubmitting] = useState(false)
+  const [errorMessage, setErrorMessage] = useState('')
+
+  const timeoutSent = useRef(false)
+
+  useEffect(() => {
+    async function loadGame() {
+      const { data, error } = await supabase
+        .from('games')
+        .select(`
+          act_started_at,
+          player1_act1_done,
+          player2_act1_done,
+          status
+        `)
+        .eq('code', gameCode)
+        .single()
+
+      if (error || !data) {
+        console.error(error)
+        setLoading(false)
+        return
+      }
+
+      if (data.status === 'act1_reveal') {
+        onReveal()
+        return
+      }
+
+      const done =
+        playerNo === 1
+          ? data.player1_act1_done
+          : data.player2_act1_done
+
+      setObjectiveDone(done)
+
+      if (data.act_started_at) {
+        const started =
+          new Date(data.act_started_at).getTime()
+
+        const elapsed =
+          Math.floor(
+            (Date.now() - started) / 1000
+          )
+
+        setRemaining(
+          Math.max(0, DURATION - elapsed)
+        )
+      }
+
+      setLoading(false)
+    }
+
+    loadGame()
+  }, [gameCode, playerNo, onReveal])
+
+  useEffect(() => {
+    const channel = supabase
+      .channel(`act1-${gameCode}-${playerNo}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'games',
+          filter: `code=eq.${gameCode}`,
+        },
+        (payload) => {
+          const game = payload.new
+
+          const done =
+            playerNo === 1
+              ? game.player1_act1_done
+              : game.player2_act1_done
+
+          setObjectiveDone(done)
+
+          if (game.status === 'act1_reveal') {
+            onReveal()
+          }
+        }
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [gameCode, playerNo, onReveal])
+
+  useEffect(() => {
+    if (loading) {
+      return
+    }
+
+    const timer = setInterval(() => {
+      setRemaining((current) =>
+        Math.max(0, current - 1)
+      )
+    }, 1000)
+
+    return () => clearInterval(timer)
+  }, [loading])
+
+  useEffect(() => {
+    if (
+      remaining !== 0 ||
+      timeoutSent.current
+    ) {
+      return
+    }
+
+    timeoutSent.current = true
+
+    async function finishByTimeout() {
+      const { error } = await supabase.rpc(
+        'timeout_act1',
+        {
+          p_game_code: gameCode,
+        }
+      )
+
+      if (error) {
+        console.error(error)
+        timeoutSent.current = false
+      }
+    }
+
+    finishByTimeout()
+  }, [remaining, gameCode])
+
+  async function completeObjective() {
+    setSubmitting(true)
+    setErrorMessage('')
+
     const { data, error } = await supabase.rpc(
-      'confirm_secret_objective',
+      'complete_act1_objective',
       {
         p_game_code: gameCode,
         p_player_no: playerNo,
@@ -764,97 +984,38 @@ function SecretObjective({
       setErrorMessage(
         'Impossible de valider votre objectif.'
       )
-      setConfirming(false)
+      setSubmitting(false)
       return
     }
 
-    if (data?.both_ready) {
-      onContinue()
-      return
-    }
+    setObjectiveDone(true)
+    setSubmitting(false)
 
-    setWaiting(true)
-    setConfirming(false)
+    if (data?.finished) {
+      onReveal()
+    }
   }
+
+  const minutes =
+    Math.floor(remaining / 60)
+
+  const seconds =
+    String(remaining % 60).padStart(2, '0')
 
   if (loading) {
     return (
       <main className="app">
         <section className="card">
           <p className="eyebrow">
-            THE PACT
+            THE PACT / ACTE I
           </p>
 
-          <h2>Préparation...</h2>
+          <h2>Synchronisation...</h2>
         </section>
       </main>
     )
   }
 
-  if (waiting) {
-    return (
-      <main className="app">
-        <section className="card">
-          <p className="eyebrow">
-            THE PACT / SECRET
-          </p>
-
-          <h2>Objectif verrouillé.</h2>
-
-          <p className="intro">
-            Votre instruction est active.
-            Attendez que votre partenaire soit prêt.
-          </p>
-
-          <div className="status">
-            <span className="status-dot"></span>
-            Synchronisation en cours
-          </div>
-        </section>
-      </main>
-    )
-  }
-
-  return (
-    <main className="app">
-      <section className="card">
-        <p className="eyebrow">
-          THE PACT / SECRET
-        </p>
-
-        <h2>Votre objectif.</h2>
-
-        <div className="secret-box">
-          {objective}
-        </div>
-
-        <p className="intro">
-          Ne montrez pas cet écran à votre partenaire.
-        </p>
-
-        {errorMessage && (
-          <p className="error-message">
-            {errorMessage}
-          </p>
-        )}
-
-        <button
-          className="primary"
-          onClick={confirmObjective}
-          disabled={confirming}
-        >
-          {confirming
-            ? 'Validation...'
-            : 'J’ai compris'}
-        </button>
-      </section>
-    </main>
-  )
-}
-
-function ActOneLive({
-  playerNo,
-}) {
   return (
     <main className="app">
       <section className="card">
@@ -864,8 +1025,13 @@ function ActOneLive({
 
         <h2>Le Signal.</h2>
 
+        <div className="timer">
+          {minutes}:{seconds}
+        </div>
+
         <p className="intro">
-          Votre objectif secret est maintenant actif.
+          Votre objectif secret est actif.
+          Votre partenaire poursuit le sien.
         </p>
 
         <div className="protocol-box">
@@ -874,29 +1040,150 @@ function ActOneLive({
           </p>
 
           <p>
-            Pendant les prochaines minutes,
-            comportez-vous normalement.
+            Continuez à interagir normalement.
           </p>
 
           <p>
             Essayez d’accomplir votre objectif
-            sans révéler son existence.
+            sans révéler ce que vous cherchez
+            à obtenir.
           </p>
 
           <p>
-            Observez attentivement les réactions
-            de votre partenaire.
+            Dès que vous estimez avoir réussi,
+            validez-le sur votre écran.
           </p>
         </div>
 
+        {objectiveDone ? (
+          <div className="objective-confirmed">
+            Objectif déclaré atteint.
+            <br />
+            Continuez à jouer normalement.
+          </div>
+        ) : (
+          <button
+            className="primary"
+            onClick={completeObjective}
+            disabled={submitting}
+          >
+            {submitting
+              ? 'Validation...'
+              : 'Objectif atteint'}
+          </button>
+        )}
+
+        {errorMessage && (
+          <p className="error-message">
+            {errorMessage}
+          </p>
+        )}
+
         <p className="warning-text">
-          Votre partenaire poursuit lui aussi
-          un objectif que vous ignorez.
+          Votre validation reste privée jusqu’à
+          la fin de l’acte.
+        </p>
+      </section>
+    </main>
+  )
+}
+
+function ActOneReveal({
+  gameCode,
+}) {
+  const [game, setGame] = useState(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    async function loadResult() {
+      const { data, error } = await supabase
+        .from('games')
+        .select(`
+          player1_objective,
+          player2_objective,
+          player1_act1_done,
+          player2_act1_done,
+          act1_advantage
+        `)
+        .eq('code', gameCode)
+        .single()
+
+      if (error) {
+        console.error(error)
+        setLoading(false)
+        return
+      }
+
+      setGame(data)
+      setLoading(false)
+    }
+
+    loadResult()
+  }, [gameCode])
+
+  if (loading) {
+    return (
+      <main className="app">
+        <section className="card">
+          <p className="eyebrow">
+            THE PACT
+          </p>
+
+          <h2>Analyse...</h2>
+        </section>
+      </main>
+    )
+  }
+
+  return (
+    <main className="app">
+      <section className="card">
+        <p className="eyebrow">
+          THE PACT / RÉVÉLATION
         </p>
 
-        <div className="status">
-          <span className="status-dot"></span>
-          Objectif actif · Joueur {playerNo}
+        <h2>Voici ce qui se jouait.</h2>
+
+        <div className="reveal-player">
+          <p className="protocol-number">
+            JOUEUR 1
+          </p>
+
+          <p>
+            {game.player1_objective}
+          </p>
+
+          <strong>
+            {game.player1_act1_done
+              ? 'RÉUSSI'
+              : 'NON VALIDÉ'}
+          </strong>
+        </div>
+
+        <div className="reveal-player">
+          <p className="protocol-number">
+            JOUEUR 2
+          </p>
+
+          <p>
+            {game.player2_objective}
+          </p>
+
+          <strong>
+            {game.player2_act1_done
+              ? 'RÉUSSI'
+              : 'NON VALIDÉ'}
+          </strong>
+        </div>
+
+        <div className="result-box">
+          <span>Avantage</span>
+
+          <strong>
+            {game.act1_advantage
+              ? `Joueur ${game.act1_advantage}`
+              : 'Aucun'}
+          </strong>
         </div>
       </section>
     </main>
@@ -1046,7 +1333,19 @@ function App() {
   if (screen === 'act1-live') {
   return (
     <ActOneLive
+      gameCode={gameCode}
       playerNo={playerNo}
+      onReveal={() =>
+        setScreen('act1-reveal')
+      }
+    />
+  )
+}
+
+if (screen === 'act1-reveal') {
+  return (
+    <ActOneReveal
+      gameCode={gameCode}
     />
   )
 }
