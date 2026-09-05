@@ -1081,6 +1081,13 @@ function ActOneReveal({
   const [starting, setStarting] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
 
+  const resultLabels = {
+    success: 'RÉUSSI',
+    exposed: 'DÉMASQUÉ',
+    abandoned: 'ABANDONNÉ',
+    pending: 'NON RÉSOLU',
+  }
+
   useEffect(() => {
     async function loadResult() {
       const { data, error } = await supabase
@@ -1089,7 +1096,7 @@ function ActOneReveal({
           player1_objective,
           player2_objective,
           player1_act1_result,
-          player2_act1_result
+          player2_act1_result,
           act1_advantage,
           status
         `)
@@ -1098,6 +1105,9 @@ function ActOneReveal({
 
       if (error) {
         console.error(error)
+        setErrorMessage(
+          'Impossible de charger le résultat.'
+        )
         setLoading(false)
         return
       }
@@ -1132,13 +1142,6 @@ function ActOneReveal({
         }
       )
       .subscribe()
-
-      const resultLabels = {
-  success: 'RÉUSSI',
-  exposed: 'DÉMASQUÉ',
-  abandoned: 'ABANDONNÉ',
-  pending: 'NON RÉSOLU',
-}
 
     return () => {
       supabase.removeChannel(channel)
@@ -1182,6 +1185,26 @@ function ActOneReveal({
     )
   }
 
+  if (!game) {
+    return (
+      <main className="app">
+        <section className="card">
+          <p className="eyebrow">
+            THE PACT / ERREUR
+          </p>
+
+          <h2>Résultat indisponible.</h2>
+
+          {errorMessage && (
+            <p className="error-message">
+              {errorMessage}
+            </p>
+          )}
+        </section>
+      </main>
+    )
+  }
+
   return (
     <main className="app">
       <section className="card">
@@ -1201,7 +1224,9 @@ function ActOneReveal({
           </p>
 
           <strong>
-            {resultLabels[game.player1_act1_result]}
+            {resultLabels[
+              game.player1_act1_result
+            ] ?? 'INCONNU'}
           </strong>
         </div>
 
@@ -1215,8 +1240,9 @@ function ActOneReveal({
           </p>
 
           <strong>
-            {resultLabels[game.player2_act1_result]}
-            
+            {resultLabels[
+              game.player2_act1_result
+            ] ?? 'INCONNU'}
           </strong>
         </div>
 
