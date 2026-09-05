@@ -16,129 +16,266 @@ function generateGameCode() {
 const ACTION_LIBRARY = [
   {
     id: 'sensory_eyes_closed',
+    category: 'sensory',
     group: 'initiative',
-    title: 'Sans regarder',
-    text:
-      'Fermez les yeux. Votre partenaire dispose de deux minutes pour créer une interaction uniquement basée sur le toucher, sans vous annoncer ce qu’il va faire.',
+    target: 'partner',
     intensity: 2,
     requires: {
       sensory: 1,
       surprise: 1,
     },
+    title: 'Sans regarder',
+    text:
+      'Fermez les yeux pendant deux minutes. Votre partenaire guide l’interaction sans annoncer à l’avance ce qu’il va faire.',
   },
 
   {
-    id: 'provocation_one_request',
+    id: 'sensory_slow_contact',
+    category: 'sensory',
     group: 'initiative',
-    title: 'Une demande',
+    target: 'holder',
+    intensity: 1,
+    requires: {
+      sensory: 1,
+    },
+    title: 'Ralentir',
     text:
-      'Formulez une demande précise à votre partenaire. Elle doit rester dans les limites établies par PROTOCOL. Votre partenaire choisit librement de l’accepter ou de passer.',
+      'Choisissez une forme de contact simple. Faites-la durer volontairement plus longtemps que d’habitude.',
+  },
+
+  {
+    id: 'sensory_no_words',
+    category: 'sensory',
+    group: 'constraint',
+    target: 'both',
     intensity: 2,
     requires: {
-      provocation: 1,
+      sensory: 1,
     },
+    title: 'Sans mots',
+    text:
+      'Pendant deux minutes, aucune instruction verbale. Un stop ou un refus reste évidemment toujours valable.',
   },
 
   {
-    id: 'control_choose_position',
+    id: 'control_take_lead',
+    category: 'control',
     group: 'initiative',
-    title: 'Prenez l’initiative',
-    text:
-      'Pendant les trois prochaines minutes, vous choisissez où chacun se place et la manière dont l’interaction commence.',
+    target: 'holder',
     intensity: 2,
     requires: {
       control: 1,
       surrender: 1,
     },
-  },
-
-  {
-    id: 'sensory_slow_contact',
-    group: 'initiative',
-    title: 'Ralentir',
+    title: 'Prenez les commandes',
     text:
-      'Choisissez une forme de contact physique simple et faites-la durer volontairement plus longtemps que d’habitude.',
-    intensity: 1,
-    requires: {
-      sensory: 1,
-    },
-  },
-
-  {
-    id: 'provocation_forbidden_word',
-    group: 'initiative',
-    title: 'Provocation',
-    text:
-      'Choisissez une phrase ou une question que vous savez légèrement provocante. Dites-la une seule fois, puis laissez votre partenaire décider de la suite.',
-    intensity: 2,
-    requires: {
-      provocation: 1,
-      improvisation: 1,
-    },
-  },
-
-  {
-    id: 'restraint_hands_still',
-    group: 'constraint',
-    title: 'Mains immobiles',
-    text:
-      'Pendant deux minutes, gardez les mains immobiles. Votre partenaire décide de la proximité et du rythme de l’interaction.',
-    intensity: 2,
-    requires: {
-      restraint: 1,
-      surrender: 1,
-    },
+      'Pendant trois minutes, vous choisissez le rythme, la proximité et la manière dont l’interaction évolue.',
   },
 
   {
     id: 'control_permission',
+    category: 'control',
     group: 'constraint',
-    title: 'Permission',
-    text:
-      'Pendant trois minutes, avant de changer volontairement l’interaction, demandez simplement la permission à votre partenaire.',
+    target: 'partner',
     intensity: 3,
     requires: {
       control: 1,
       surrender: 1,
     },
+    title: 'Permission',
+    text:
+      'Pendant trois minutes, avant de modifier volontairement l’interaction, demandez l’accord de votre partenaire.',
   },
 
   {
-    id: 'sensory_no_words',
-    group: 'constraint',
-    title: 'Sans mots',
-    text:
-      'Pendant deux minutes, ne donnez aucune instruction verbale. Vous pouvez toujours interrompre immédiatement l’action si nécessaire.',
+    id: 'control_position',
+    category: 'control',
+    group: 'initiative',
+    target: 'holder',
     intensity: 2,
     requires: {
-      sensory: 1,
+      control: 1,
+      surrender: 1,
     },
+    title: 'Placement',
+    text:
+      'Choisissez où chacun se place pour la prochaine interaction. Votre partenaire peut toujours refuser ou modifier la proposition.',
   },
 
   {
-    id: 'restraint_stay_where_you_are',
+    id: 'surrender_no_decision',
+    category: 'surrender',
     group: 'constraint',
-    title: 'Restez là',
+    target: 'partner',
+    intensity: 2,
+    requires: {
+      surrender: 1,
+    },
+    title: 'Ne choisissez pas',
     text:
-      'Pendant deux minutes, restez à l’endroit choisi par votre partenaire. Vous pouvez bouger ou arrêter immédiatement si vous le souhaitez.',
+      'Pour la prochaine interaction, laissez votre partenaire prendre la première décision.',
+  },
+
+  {
+    id: 'surrender_follow',
+    category: 'surrender',
+    group: 'constraint',
+    target: 'partner',
+    intensity: 3,
+    requires: {
+      surrender: 1,
+      control: 1,
+    },
+    title: 'Suivez',
+    text:
+      'Pendant deux minutes, laissez votre partenaire diriger l’enchaînement. Vous gardez à tout moment la possibilité de passer.',
+  },
+
+  {
+    id: 'restraint_hands_still',
+    category: 'restraint',
+    group: 'constraint',
+    target: 'partner',
     intensity: 2,
     requires: {
       restraint: 1,
       surrender: 1,
     },
+    title: 'Mains immobiles',
+    text:
+      'Pendant deux minutes, gardez les mains immobiles et laissez votre partenaire décider du rythme de l’interaction.',
   },
 
   {
-    id: 'surprise_partner_decides',
+    id: 'restraint_stay',
+    category: 'restraint',
     group: 'constraint',
-    title: 'Ne choisissez pas',
+    target: 'partner',
+    intensity: 2,
+    requires: {
+      restraint: 1,
+      surrender: 1,
+    },
+    title: 'Restez là',
     text:
-      'Pour la prochaine interaction, laissez votre partenaire choisir entre deux possibilités compatibles avec vos limites communes.',
+      'Pendant deux minutes, restez à l’endroit choisi ensemble. Votre partenaire contrôle l’évolution de l’interaction.',
+  },
+
+  {
+    id: 'restraint_posture',
+    category: 'restraint',
+    group: 'constraint',
+    target: 'partner',
+    intensity: 3,
+    requires: {
+      restraint: 1,
+      surrender: 1,
+    },
+    title: 'Posture imposée',
+    text:
+      'Votre partenaire choisit une posture simple que vous conservez pendant une minute.',
+  },
+
+  {
+    id: 'provocation_request',
+    category: 'provocation',
+    group: 'initiative',
+    target: 'holder',
+    intensity: 2,
+    requires: {
+      provocation: 1,
+    },
+    title: 'Une demande',
+    text:
+      'Formulez une demande précise à votre partenaire. Il peut l’accepter, la modifier ou passer.',
+  },
+
+  {
+    id: 'provocation_challenge',
+    category: 'provocation',
+    group: 'initiative',
+    target: 'holder',
+    intensity: 2,
+    requires: {
+      provocation: 1,
+      competition: 1,
+    },
+    title: 'Défi',
+    text:
+      'Lancez un petit défi à votre partenaire. S’il accepte, c’est lui qui choisira ce que gagne le vainqueur.',
+  },
+
+  {
+    id: 'provocation_statement',
+    category: 'provocation',
+    group: 'initiative',
+    target: 'holder',
+    intensity: 2,
+    requires: {
+      provocation: 1,
+      improvisation: 1,
+    },
+    title: 'Dites-le',
+    text:
+      'Dites à votre partenaire quelque chose que vous pensez mais que vous exprimez rarement dans ce contexte. Puis laissez un silence.',
+  },
+
+  {
+    id: 'surprise_close_eyes',
+    category: 'surprise',
+    group: 'constraint',
+    target: 'partner',
     intensity: 2,
     requires: {
       surprise: 1,
-      surrender: 1,
+      sensory: 1,
     },
+    title: 'Faites confiance',
+    text:
+      'Fermez les yeux. Votre partenaire choisit la prochaine interaction sans vous en annoncer la nature à l’avance.',
+  },
+
+  {
+    id: 'surprise_two_options',
+    category: 'surprise',
+    group: 'initiative',
+    target: 'partner',
+    intensity: 2,
+    requires: {
+      surprise: 1,
+    },
+    title: 'Deux possibilités',
+    text:
+      'Votre partenaire imagine deux possibilités compatibles avec vos limites. Choisissez A ou B avant de savoir laquelle correspond à quoi.',
+  },
+
+  {
+    id: 'improv_continue',
+    category: 'improvisation',
+    group: 'initiative',
+    target: 'both',
+    intensity: 2,
+    requires: {
+      improvisation: 1,
+    },
+    title: 'Ne préparez rien',
+    text:
+      'Commencez une interaction sans décider comment elle doit finir. Laissez chacun modifier naturellement la suite.',
+  },
+
+  {
+    id: 'improv_mirror',
+    category: 'improvisation',
+    group: 'initiative',
+    target: 'both',
+    intensity: 2,
+    requires: {
+      improvisation: 1,
+      sensory: 1,
+    },
+    title: 'Miroir',
+    text:
+      'L’un commence un geste ou une interaction simple. L’autre répond en reprenant ou en transformant ce geste.',
   },
 ]
 
@@ -167,11 +304,13 @@ function isActionAllowed(action, profile) {
 
 function getCompatibleActions(
   profile,
-  group
+  group,
+  usedActionIds = []
 ) {
   return ACTION_LIBRARY.filter(
     (action) =>
       action.group === group &&
+      !usedActionIds.includes(action.id) &&
       isActionAllowed(action, profile)
   )
 }
@@ -196,9 +335,11 @@ function pickCompatibleAction(
     return null
   }
 
+  const seed =
+    `${gameCode}-${group}-${actions.length}`
+
   const index =
-    hashString(`${gameCode}-${group}`) %
-    actions.length
+    hashString(seed) % actions.length
 
   return actions[index]
 }
@@ -1981,7 +2122,11 @@ function ActTwoBlindReveal({
     async function loadAction() {
       const { data, error } = await supabase
         .from('games')
-        .select('shared_profile')
+        .select(`
+  shared_profile,
+  used_action_ids,
+  act2_action_id
+`)
         .eq('code', gameCode)
         .single()
 
@@ -1999,21 +2144,57 @@ function ActTwoBlindReveal({
           ? 'initiative'
           : 'constraint'
 
-      const compatibleActions =
-        getCompatibleActions(
-          data.shared_profile,
-          group
-        )
+      if (data.act2_action_id) {
+  const existingAction =
+    ACTION_LIBRARY.find(
+      (action) =>
+        action.id === data.act2_action_id
+    )
 
-      const selected =
-        pickCompatibleAction(
-          compatibleActions,
-          gameCode,
-          group
-        )
+  if (existingAction) {
+    setAction(existingAction)
+    setLoading(false)
+    return
+  }
+}
 
-      setAction(selected)
-      setLoading(false)
+const compatibleActions =
+  getCompatibleActions(
+    data.shared_profile,
+    group,
+    data.used_action_ids ?? []
+  )
+
+const selected =
+  pickCompatibleAction(
+    compatibleActions,
+    gameCode,
+    group
+  )
+
+if (!selected) {
+  setLoading(false)
+  return
+}
+
+const { error: registerError } =
+  await supabase.rpc(
+    'register_action',
+    {
+      p_game_code: gameCode,
+      p_action_id: selected.id,
+    }
+  )
+
+if (registerError) {
+  console.error(registerError)
+  setErrorMessage(
+    'Impossible d’enregistrer cette action.'
+  )
+}
+
+setAction(selected)
+setLoading(false)
     }
 
     loadAction()
@@ -2079,6 +2260,18 @@ function ActTwoBlindReveal({
 
         <h2>Conséquence révélée.</h2>
 
+        <div className="result-box">
+  <span>Cible</span>
+
+  <strong>
+    {action.target === 'holder'
+      ? 'Détenteur de l’Avantage'
+      : action.target === 'partner'
+        ? 'Partenaire'
+        : 'Les deux joueurs'}
+  </strong>
+</div>
+        
         <div className="protocol-box">
           <p className="protocol-number">
             {action.title.toUpperCase()}
