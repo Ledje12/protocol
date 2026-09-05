@@ -1121,9 +1121,13 @@ function ActOneLive({
 
 function ActOneReveal({
   gameCode,
+  playerNo,
+  onActTwo,
 }) {
   const [game, setGame] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [starting, setStarting] = useState(false)
+  const [errorMessage, setErrorMessage] = useState('')
 
   useEffect(() => {
     async function loadResult() {
@@ -1134,7 +1138,8 @@ function ActOneReveal({
           player2_objective,
           player1_act1_done,
           player2_act1_done,
-          act1_advantage
+          act1_advantage,
+          status
         `)
         .eq('code', gameCode)
         .single()
@@ -1145,12 +1150,64 @@ function ActOneReveal({
         return
       }
 
+      if (data.status === 'act2_choice') {
+        onActTwo()
+        return
+      }
+
       setGame(data)
       setLoading(false)
     }
 
     loadResult()
-  }, [gameCode])
+  }, [gameCode, onActTwo])
+
+  useEffect(() => {
+    const channel = supabase
+      .channel(`act1-reveal-${gameCode}-${playerNo}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'games',
+          filter: `code=eq.${gameCode}`,
+        },
+        (payload) => {
+          if (payload.new.status === 'act2_choice') {
+            onActTwo()
+          }
+        }
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [gameCode, playerNo, onActTwo])
+
+  async function startActTwo() {
+    setStarting(true)
+    setErrorMessage('')
+
+    const { error } = await supabase.rpc(
+      'start_act2',
+      {
+        p_game_code: gameCode,
+      }
+    )
+
+    if (error) {
+      console.error(error)
+      setErrorMessage(
+        'Impossible de lancer l’Acte II.'
+      )
+      setStarting(false)
+      return
+    }
+
+    onActTwo()
+  }
 
   if (loading) {
     return (
@@ -1216,6 +1273,117 @@ function ActOneReveal({
               : 'Aucun'}
           </strong>
         </div>
+
+        {errorMessage && (
+          <p className="error-message">
+            {errorMessage}
+          </p>
+        )}
+
+        {playerNo === 1 ? (
+          <button
+            className="primary"
+            onClick={startActTwo}
+            disabled={starting}
+          >
+            {starting
+              ? 'Initialisation...'
+              : 'Continuer vers l’Acte II'}
+          </button>
+        ) : (
+          <div className="status">
+            <span className="status-dot"></span>
+            En attente du lancement de l’Acte II
+          </div>
+        )}
+      </section>
+    </main>
+  )
+}
+
+function ActTwoIntro({
+  gameCode,
+  playerNo,
+}) {
+  const [advantage, setAdvantage] = useState(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    async function loadActTwo() {
+      const { data, error } = await supabase
+        .from('games')
+        .select('act1_advantage')
+        .eq('code', gameCode)
+        .single()
+
+      if (error) {
+        console.error(error)
+        setLoading(false)
+        return
+      }
+
+      setAdvantage(data.act1_advantage)
+      setLoading(false)
+    }
+
+    loadActTwo()
+  }, [gameCode])
+
+  if (loading) {
+    return (
+      <main className="app">
+        <section className="card">
+          <p className="eyebrow">
+            THE PACT / ACTE II
+          </p>
+
+          <h2>Préparation...</h2>
+        </section>
+      </main>
+    )
+  }
+
+  const hasAdvantage =
+    advantage === playerNo
+
+  return (
+    <main className="app">
+      <section className="card">
+        <p className="eyebrow">
+          THE PACT / ACTE II
+        </p>
+
+        <h2>L’Avantage.</h2>
+
+        {advantage === null ? (
+          <p className="intro">
+            Aucun joueur n’a obtenu d’avantage.
+            PROTOCOL va modifier les règles.
+          </p>
+        ) : hasAdvantage ? (
+          <>
+            <p className="intro">
+              Vous détenez l’Avantage.
+            </p>
+
+            <div className="secret-box">
+              Vous allez pouvoir modifier
+              temporairement les règles du jeu.
+            </div>
+          </>
+        ) : (
+          <>
+            <p className="intro">
+              Votre partenaire détient l’Avantage.
+            </p>
+
+            <div className="secret-box">
+              Une décision va être prise sans
+              que vous en connaissiez immédiatement
+              la nature.
+            </div>
+          </>
+        )}
       </section>
     </main>
   )
@@ -1377,6 +1545,10 @@ if (screen === 'act1-reveal') {
   return (
     <ActOneReveal
       gameCode={gameCode}
+      playerNo={playerNo}
+      onActTwo={() =>
+        setScreen('act2-intro')
+      }
     />
   )
 }
