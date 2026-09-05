@@ -277,6 +277,99 @@ const ACTION_LIBRARY = [
     text:
       'L’un commence un geste ou une interaction simple. L’autre répond en reprenant ou en transformant ce geste.',
   },
+
+{
+  id: 'lock_close_and_still',
+  category: 'restraint',
+  group: 'lock',
+  target: 'partner',
+  intensity: 3,
+  requires: {
+    restraint: 1,
+    surrender: 1,
+    sensory: 1,
+  },
+  title: 'Immobile',
+  text:
+    'Pendant la résolution du verrou, restez proche de votre partenaire et gardez les mains immobiles. La contrainte cesse immédiatement si vous souhaitez passer.',
+},
+
+{
+  id: 'lock_guided_position',
+  category: 'control',
+  group: 'lock',
+  target: 'partner',
+  intensity: 3,
+  requires: {
+    control: 1,
+    surrender: 1,
+  },
+  title: 'Position choisie',
+  text:
+    'Votre partenaire choisit votre position pendant la résolution du verrou. Vous pouvez la modifier ou interrompre la règle à tout moment.',
+},
+
+{
+  id: 'lock_no_questions',
+  category: 'control',
+  group: 'lock',
+  target: 'both',
+  intensity: 3,
+  requires: {
+    control: 1,
+    improvisation: 1,
+  },
+  title: 'Pas de questions',
+  text:
+    'Jusqu’à l’ouverture du verrou, aucune question directe. Vous devez transmettre vos indices autrement.',
+},
+
+{
+  id: 'lock_eyes_closed',
+  category: 'sensory',
+  group: 'lock',
+  target: 'partner',
+  intensity: 3,
+  requires: {
+    sensory: 1,
+    surprise: 1,
+  },
+  title: 'Sans voir',
+  text:
+    'Pendant une partie de la résolution, gardez les yeux fermés pendant que votre partenaire vous communique son indice.',
+},
+
+{
+  id: 'lock_obey_one',
+  category: 'surrender',
+  group: 'lock',
+  target: 'partner',
+  intensity: 4,
+  requires: {
+    control: 2,
+    surrender: 2,
+    provocation: 1,
+  },
+  title: 'Une instruction',
+  text:
+    'Pendant le verrou, votre partenaire peut vous donner une seule instruction liée à la mise en scène ou à votre position. Vous pouvez toujours la refuser ou la modifier.',
+},
+
+{
+  id: 'lock_silent_guidance',
+  category: 'sensory',
+  group: 'lock',
+  target: 'both',
+  intensity: 4,
+  requires: {
+    sensory: 2,
+    surprise: 1,
+    improvisation: 1,
+  },
+  title: 'Guidage silencieux',
+  text:
+    'Pendant une minute, communiquez uniquement par gestes et contact. Après cette minute, vous pouvez reprendre la parole pour résoudre le verrou.',
+},
 ]
 
 function isActionAllowed(action, profile) {
@@ -350,6 +443,35 @@ function getActionDebugReport(profile, usedActionIds = []) {
       reasons,
     }
   })
+}
+
+function getEscalatedActions(
+  profile,
+  usedActionIds = []
+) {
+  const compatible =
+    getCompatibleActions(
+      profile,
+      'lock',
+      usedActionIds
+    )
+
+  if (compatible.length === 0) {
+    return []
+  }
+
+  const maxAllowedIntensity =
+    Math.max(
+      ...compatible.map(
+        (action) => action.intensity
+      )
+    )
+
+  return compatible.filter(
+    (action) =>
+      action.intensity ===
+      maxAllowedIntensity
+  )
 }
 
 function ActionDebug({
@@ -2927,15 +3049,113 @@ function ActThreeIntro({
 
 function ActThreeLock({
   gameCode,
+  playerNo,
   onSolved,
 }) {
   const [code, setCode] = useState('')
+  const [action, setAction] = useState(null)
+  const [loading, setLoading] = useState(true)
   const [errorMessage, setErrorMessage] = useState('')
   const [submitting, setSubmitting] = useState(false)
 
   useEffect(() => {
+    async function prepareLock() {
+      const { data, error } = await supabase
+        .from('games')
+        .select(`
+          shared_profile,
+          used_action_ids,
+          act3_action_id,
+          status
+        `)
+        .eq('code', gameCode)
+        .single()
+
+      if (error) {
+        console.error(error)
+        setErrorMessage(
+          'Impossible de préparer le verrou.'
+        )
+        setLoading(false)
+        return
+      }
+
+      if (data.status === 'act3_solved') {
+        onSolved()
+        return
+      }
+
+      if (data.act3_action_id) {
+        const existingAction =
+          ACTION_LIBRARY.find(
+            (item) =>
+              item.id ===
+              data.act3_action_id
+          )
+
+        setAction(existingAction ?? null)
+        setLoading(false)
+        return
+      }
+
+      const candidates =
+        getEscalatedActions(
+          data.shared_profile,
+          data.used_action_ids ?? []
+        )
+
+      const selected =
+        pickCompatibleAction(
+          candidates,
+          gameCode,
+          'lock'
+        )
+
+      if (!selected) {
+        setLoading(false)
+        return
+      }
+
+      const { data: registerData, error: registerError } =
+        await supabase.rpc(
+          'register_act3_action',
+          {
+            p_game_code: gameCode,
+            p_action_id: selected.id,
+          }
+        )
+
+      if (registerError) {
+        console.error(registerError)
+        setErrorMessage(
+          'Impossible d’activer la contrainte.'
+        )
+        setLoading(false)
+        return
+      }
+
+      const registeredAction =
+        ACTION_LIBRARY.find(
+          (item) =>
+            item.id ===
+            registerData.action_id
+        )
+
+      setAction(
+        registeredAction ?? selected
+      )
+
+      setLoading(false)
+    }
+
+    prepareLock()
+  }, [gameCode, onSolved])
+
+  useEffect(() => {
     const channel = supabase
-      .channel(`act3-${gameCode}`)
+      .channel(
+        `act3-${gameCode}-${playerNo}`
+      )
       .on(
         'postgres_changes',
         {
@@ -2951,6 +3171,21 @@ function ActThreeLock({
           ) {
             onSolved()
           }
+
+          if (
+            payload.new.act3_action_id
+          ) {
+            const selected =
+              ACTION_LIBRARY.find(
+                (item) =>
+                  item.id ===
+                  payload.new.act3_action_id
+              )
+
+            if (selected) {
+              setAction(selected)
+            }
+          }
         }
       )
       .subscribe()
@@ -2958,7 +3193,11 @@ function ActThreeLock({
     return () => {
       supabase.removeChannel(channel)
     }
-  }, [gameCode, onSolved])
+  }, [
+    gameCode,
+    playerNo,
+    onSolved,
+  ])
 
   async function submitCode() {
     setSubmitting(true)
@@ -2992,6 +3231,22 @@ function ActThreeLock({
     onSolved()
   }
 
+  if (loading) {
+    return (
+      <main className="app">
+        <section className="card">
+          <p className="eyebrow">
+            THE PACT / ACTE III
+          </p>
+
+          <h2>
+            Activation du Verrou...
+          </h2>
+        </section>
+      </main>
+    )
+  }
+
   return (
     <main className="app">
       <section className="card">
@@ -2999,10 +3254,52 @@ function ActThreeLock({
           THE PACT / ACTE III
         </p>
 
-        <h2>Entrez le code.</h2>
+        <h2>Le Verrou.</h2>
+
+        {action ? (
+          <>
+            <div className="result-box">
+              <span>
+                CONTRAINTE ACTIVE
+              </span>
+
+              <strong>
+                Niveau {action.intensity}
+              </strong>
+            </div>
+
+            <div className="protocol-box">
+              <p className="protocol-number">
+                {action.title.toUpperCase()}
+              </p>
+
+              <p>
+                {action.text}
+              </p>
+            </div>
+
+            <p className="warning-text">
+              Cette règle reste active jusqu’à
+              l’ouverture du verrou. Elle peut
+              toujours être interrompue ou passée.
+            </p>
+          </>
+        ) : (
+          <div className="protocol-box">
+            <p className="protocol-number">
+              RÈGLE NEUTRE
+            </p>
+
+            <p>
+              Aucune contrainte supplémentaire
+              compatible n’a été trouvée.
+            </p>
+          </div>
+        )}
 
         <p className="intro">
-          Vous avez chacun une partie de la solution.
+          Combinez vos deux indices et entrez
+          le code.
         </p>
 
         <input
@@ -3320,11 +3617,12 @@ if (screen === 'act3-intro') {
 if (screen === 'act3-lock') {
   return (
     <ActThreeLock
-      gameCode={gameCode}
-      onSolved={() =>
-        setScreen('act3-solved')
-      }
-    />
+  gameCode={gameCode}
+  playerNo={playerNo}
+  onSolved={() =>
+    setScreen('act3-solved')
+  }
+/>
   )
 }
 
