@@ -1425,56 +1425,67 @@ function SecretObjective({
   onContinue,
 }) {
   const [objective, setObjective] = useState('')
+  const [role, setRole] = useState('')
   const [loading, setLoading] = useState(true)
   const [confirming, setConfirming] = useState(false)
   const [waiting, setWaiting] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
-  const [role, setRole] = useState('')
 
   useEffect(() => {
     async function loadObjective() {
       const objectiveField =
-  playerNo === 1
-    ? 'player1_objective'
-    : 'player2_objective'
+        playerNo === 1
+          ? 'player1_objective'
+          : 'player2_objective'
 
-const roleField =
-  playerNo === 1
-    ? 'player1_role'
-    : 'player2_role'
+      const roleField =
+        playerNo === 1
+          ? 'player1_role'
+          : 'player2_role'
 
       const { data, error } = await supabase
-  .from('games')
-  .select(`
-    ${objectiveField},
-    ${roleField}
-  `)
-  .eq('code', gameCode)
-  .single()
+        .from('games')
+        .select(`
+          ${objectiveField},
+          ${roleField},
+          status
+        `)
+        .eq('code', gameCode)
+        .single()
 
-  setObjective(data[objectiveField])
-setRole(data[roleField])
-setLoading(false)
-
-      if (error) {
+      if (error || !data) {
         console.error(error)
         setErrorMessage(
-          'Impossible de charger votre objectif.'
+          'Impossible de charger votre mission.'
         )
         setLoading(false)
         return
       }
 
-      setObjective(data[field])
+      /*
+       * Important :
+       * si l'Acte I a déjà commencé avant que
+       * ce téléphone ait reçu l'événement realtime,
+       * on ne doit surtout pas rester bloqué ici.
+       */
+      if (data.status === 'act1_live') {
+        onContinue()
+        return
+      }
+
+      setObjective(data[objectiveField] ?? '')
+      setRole(data[roleField] ?? '')
       setLoading(false)
     }
 
     loadObjective()
-  }, [gameCode, playerNo])
+  }, [gameCode, playerNo, onContinue])
 
   useEffect(() => {
     const channel = supabase
-      .channel(`objective-ready-${gameCode}-${playerNo}`)
+      .channel(
+        `objective-ready-${gameCode}-${playerNo}`
+      )
       .on(
         'postgres_changes',
         {
@@ -1484,7 +1495,9 @@ setLoading(false)
           filter: `code=eq.${gameCode}`,
         },
         (payload) => {
-          if (payload.new.status === 'act1_live') {
+          if (
+            payload.new.status === 'act1_live'
+          ) {
             onContinue()
           }
         }
@@ -1511,7 +1524,7 @@ setLoading(false)
     if (error) {
       console.error(error)
       setErrorMessage(
-        'Impossible de valider votre objectif.'
+        'Impossible de valider votre mission.'
       )
       setConfirming(false)
       return
@@ -1524,6 +1537,32 @@ setLoading(false)
 
     setWaiting(true)
     setConfirming(false)
+
+    /*
+     * Deuxième garde-fou.
+     *
+     * On relit immédiatement le statut après la RPC.
+     * Si l'autre joueur a validé entre-temps,
+     * on avance même si l'événement realtime
+     * a été raté.
+     */
+    const { data: currentGame, error: statusError } =
+      await supabase
+        .from('games')
+        .select('status')
+        .eq('code', gameCode)
+        .single()
+
+    if (statusError) {
+      console.error(statusError)
+      return
+    }
+
+    if (
+      currentGame?.status === 'act1_live'
+    ) {
+      onContinue()
+    }
   }
 
   if (loading) {
@@ -1554,10 +1593,10 @@ setLoading(false)
             THE PACT / SECRET
           </p>
 
-          <h2>Objectif verrouillé.</h2>
+          <h2>Mission verrouillée.</h2>
 
           <p className="intro">
-            Votre instruction est active.
+            Votre mission est active.
             Attendez que votre partenaire soit prêt.
           </p>
 
@@ -1580,9 +1619,9 @@ setLoading(false)
         <h2>Votre mission.</h2>
 
         <div className="result-box">
-  <span>Votre rôle</span>
-  <strong>{role}</strong>
-</div>
+          <span>Votre rôle</span>
+          <strong>{role}</strong>
+        </div>
 
         <div className="secret-box">
           {objective}
