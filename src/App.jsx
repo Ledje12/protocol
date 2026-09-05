@@ -1657,14 +1657,30 @@ function ActOneLive({
   onReveal,
 }) {
   const [result, setResult] = useState('pending')
+  const [role, setRole] = useState('')
+  const [objective, setObjective] = useState('')
+  const [missionVisible, setMissionVisible] = useState(false)
+  const [partnerResolved, setPartnerResolved] = useState(false)
+
+  const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
+
+  const resultLabels = {
+    success: 'MISSION ACCOMPLIE',
+    exposed: 'VOUS AVEZ ÉTÉ DÉMASQUÉ',
+    abandoned: 'MISSION PASSÉE',
+  }
 
   useEffect(() => {
     async function loadGame() {
       const { data, error } = await supabase
         .from('games')
         .select(`
+          player1_role,
+          player2_role,
+          player1_objective,
+          player2_objective,
           player1_act1_result,
           player2_act1_result,
           status
@@ -1674,6 +1690,10 @@ function ActOneLive({
 
       if (error) {
         console.error(error)
+        setErrorMessage(
+          'Impossible de charger l’Acte I.'
+        )
+        setLoading(false)
         return
       }
 
@@ -1682,20 +1702,50 @@ function ActOneLive({
         return
       }
 
-      const currentResult =
+      const ownResult =
         playerNo === 1
           ? data.player1_act1_result
           : data.player2_act1_result
 
-      setResult(currentResult)
+      const otherResult =
+        playerNo === 1
+          ? data.player2_act1_result
+          : data.player1_act1_result
+
+      const ownRole =
+        playerNo === 1
+          ? data.player1_role
+          : data.player2_role
+
+      const ownObjective =
+        playerNo === 1
+          ? data.player1_objective
+          : data.player2_objective
+
+      setResult(ownResult ?? 'pending')
+      setRole(ownRole ?? '')
+      setObjective(ownObjective ?? '')
+
+      setPartnerResolved(
+        otherResult &&
+        otherResult !== 'pending'
+      )
+
+      setLoading(false)
     }
 
     loadGame()
-  }, [gameCode, playerNo, onReveal])
+  }, [
+    gameCode,
+    playerNo,
+    onReveal,
+  ])
 
   useEffect(() => {
     const channel = supabase
-      .channel(`act1-${gameCode}-${playerNo}`)
+      .channel(
+        `act1-${gameCode}-${playerNo}`
+      )
       .on(
         'postgres_changes',
         {
@@ -1707,14 +1757,28 @@ function ActOneLive({
         (payload) => {
           const game = payload.new
 
-          const currentResult =
+          const ownResult =
             playerNo === 1
               ? game.player1_act1_result
               : game.player2_act1_result
 
-          setResult(currentResult)
+          const otherResult =
+            playerNo === 1
+              ? game.player2_act1_result
+              : game.player1_act1_result
 
-          if (game.status === 'act1_reveal') {
+          setResult(
+            ownResult ?? 'pending'
+          )
+
+          setPartnerResolved(
+            otherResult &&
+            otherResult !== 'pending'
+          )
+
+          if (
+            game.status === 'act1_reveal'
+          ) {
             onReveal()
           }
         }
@@ -1724,7 +1788,11 @@ function ActOneLive({
     return () => {
       supabase.removeChannel(channel)
     }
-  }, [gameCode, playerNo, onReveal])
+  }, [
+    gameCode,
+    playerNo,
+    onReveal,
+  ])
 
   async function resolveObjective(newResult) {
     setSubmitting(true)
@@ -1756,13 +1824,7 @@ function ActOneLive({
     }
   }
 
-  if (result !== 'pending') {
-    const labels = {
-      success: 'Objectif déclaré atteint.',
-      exposed: 'Objectif déclaré démasqué.',
-      abandoned: 'Objectif abandonné.',
-    }
-
+  if (loading) {
     return (
       <main className="app">
         <section className="card">
@@ -1770,28 +1832,55 @@ function ActOneLive({
             THE PACT / ACTE I
           </p>
 
-          <h2>Ne vous faites pas démasquer.</h2>
+          <h2>Activation...</h2>
+        </section>
+      </main>
+    )
+  }
 
-<p className="intro">
-  Votre partenaire poursuit sa propre mission.
-  Vous ignorez ce qu’il cherche à provoquer.
-</p>
+  if (result !== 'pending') {
+    return (
+      <main className="app">
+        <section className="card">
+          <p className="eyebrow">
+            THE PACT / ACTE I
+          </p>
 
-<div className="protocol-box">
-  <p className="protocol-number">
-    PROTOCOLE 01
-  </p>
+          <h2>
+            Votre décision est verrouillée.
+          </h2>
 
-  <p>
-    Faites évoluer naturellement la situation
-    jusqu’à obtenir ce que votre mission exige.
-  </p>
+          <div className="result-box">
+            <span>Résultat déclaré</span>
 
-  <p>
-    Plus vous rendez votre intention évidente,
-    plus votre partenaire peut vous démasquer.
-  </p>
-</div>
+            <strong>
+              {resultLabels[result] ??
+                'ENREGISTRÉ'}
+            </strong>
+          </div>
+
+          <p className="intro">
+            Votre partenaire ne connaît pas encore
+            votre mission ni le résultat que vous
+            avez déclaré.
+          </p>
+
+          {partnerResolved ? (
+            <div className="status">
+              <span className="status-dot"></span>
+              Les deux décisions sont enregistrées
+            </div>
+          ) : (
+            <div className="status">
+              <span className="status-dot"></span>
+              Votre partenaire joue encore
+            </div>
+          )}
+
+          <p className="warning-text">
+            Ne révélez rien avant que PROTOCOL
+            ouvre la phase de révélation.
+          </p>
         </section>
       </main>
     )
@@ -1807,9 +1896,15 @@ function ActOneLive({
         <h2>Le Signal.</h2>
 
         <p className="intro">
-          Votre objectif secret est actif.
-          Votre partenaire poursuit le sien.
+          Votre partenaire poursuit sa propre
+          mission. Vous ignorez ce qu’il tente
+          d’obtenir de vous.
         </p>
+
+        <div className="result-box">
+          <span>Votre rôle</span>
+          <strong>{role}</strong>
+        </div>
 
         <div className="protocol-box">
           <p className="protocol-number">
@@ -1817,46 +1912,81 @@ function ActOneLive({
           </p>
 
           <p>
-            Essayez d’accomplir votre objectif
-            sans révéler ce que vous cherchez à obtenir.
+            Faites évoluer naturellement la
+            situation jusqu’à obtenir ce que votre
+            mission exige.
           </p>
 
           <p>
-            Décidez vous-même quand votre objectif
-            est résolu.
+            Ne rendez pas votre intention trop
+            évidente. Votre partenaire pourrait
+            comprendre ce que vous cherchez.
           </p>
         </div>
 
+        {!missionVisible ? (
+          <button
+            className="secondary"
+            onClick={() =>
+              setMissionVisible(true)
+            }
+          >
+            Revoir ma mission
+          </button>
+        ) : (
+          <>
+            <div className="secret-box">
+              {objective}
+            </div>
+
+            <button
+              className="secondary"
+              onClick={() =>
+                setMissionVisible(false)
+              }
+            >
+              Masquer ma mission
+            </button>
+          </>
+        )}
+
+        {partnerResolved && (
+          <div className="status">
+            <span className="status-dot"></span>
+            Votre partenaire a verrouillé sa décision
+          </div>
+        )}
+
         <div className="action-stack">
           <button
-  className="primary"
-  onClick={() =>
-    resolveObjective('success')
-  }
-  disabled={submitting}
->
-  Je l’ai obtenu
-</button>
+            className="primary"
+            onClick={() =>
+              resolveObjective('success')
+            }
+            disabled={submitting}
+          >
+            Je l’ai obtenu
+          </button>
 
-<button
-  className="secondary"
-  onClick={() =>
-    resolveObjective('exposed')
-  }
-  disabled={submitting}
->
-  Mon jeu a été démasqué
-</button>
+          <button
+            className="secondary"
+            onClick={() =>
+              resolveObjective('exposed')
+            }
+            disabled={submitting}
+          >
+            Mon jeu a été démasqué
+          </button>
 
-<button
-  className="tertiary-button"
-  onClick={() =>
-    resolveObjective('abandoned')
-  }
-  disabled={submitting}
->
-  Passer cette mission
-</button>
+          <button
+            className="tertiary-button"
+            onClick={() =>
+              resolveObjective('abandoned')
+            }
+            disabled={submitting}
+          >
+            Passer cette mission
+          </button>
         </div>
 
         {errorMessage && (
@@ -1866,7 +1996,8 @@ function ActOneLive({
         )}
 
         <p className="warning-text">
-          Votre choix reste privé jusqu’à la révélation.
+          Votre décision reste secrète jusqu’à
+          la révélation.
         </p>
       </section>
     </main>
