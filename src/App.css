@@ -444,3 +444,32 @@ h2 {
   line-height: 1.5;
   color: #92929c;
 }
+
+.action-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.tertiary-button {
+  width: 100%;
+  min-height: 48px;
+
+  border: 0;
+  background: transparent;
+  color: #777781;
+
+  font: inherit;
+  font-size: 13px;
+
+  cursor: pointer;
+}
+
+.tertiary-button:hover {
+  color: #aaaab3;
+}
+
+.tertiary-button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}

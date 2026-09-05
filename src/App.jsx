@@ -863,32 +863,24 @@ function ActOneLive({
   playerNo,
   onReveal,
 }) {
-  const DURATION = 30
-
-  const [remaining, setRemaining] = useState(DURATION)
-  const [objectiveDone, setObjectiveDone] = useState(false)
-  const [loading, setLoading] = useState(true)
+  const [result, setResult] = useState('pending')
   const [submitting, setSubmitting] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
-
-  const timeoutSent = useRef(false)
 
   useEffect(() => {
     async function loadGame() {
       const { data, error } = await supabase
         .from('games')
         .select(`
-          act_started_at,
-          player1_act1_done,
-          player2_act1_done,
+          player1_act1_result,
+          player2_act1_result,
           status
         `)
         .eq('code', gameCode)
         .single()
 
-      if (error || !data) {
+      if (error) {
         console.error(error)
-        setLoading(false)
         return
       }
 
@@ -897,28 +889,12 @@ function ActOneLive({
         return
       }
 
-      const done =
+      const currentResult =
         playerNo === 1
-          ? data.player1_act1_done
-          : data.player2_act1_done
+          ? data.player1_act1_result
+          : data.player2_act1_result
 
-      setObjectiveDone(done)
-
-      if (data.act_started_at) {
-        const started =
-          new Date(data.act_started_at).getTime()
-
-        const elapsed =
-          Math.floor(
-            (Date.now() - started) / 1000
-          )
-
-        setRemaining(
-          Math.max(0, DURATION - elapsed)
-        )
-      }
-
-      setLoading(false)
+      setResult(currentResult)
     }
 
     loadGame()
@@ -938,12 +914,12 @@ function ActOneLive({
         (payload) => {
           const game = payload.new
 
-          const done =
+          const currentResult =
             playerNo === 1
-              ? game.player1_act1_done
-              : game.player2_act1_done
+              ? game.player1_act1_result
+              : game.player2_act1_result
 
-          setObjectiveDone(done)
+          setResult(currentResult)
 
           if (game.status === 'act1_reveal') {
             onReveal()
@@ -957,69 +933,29 @@ function ActOneLive({
     }
   }, [gameCode, playerNo, onReveal])
 
-  useEffect(() => {
-    if (loading) {
-      return
-    }
-
-    const timer = setInterval(() => {
-      setRemaining((current) =>
-        Math.max(0, current - 1)
-      )
-    }, 1000)
-
-    return () => clearInterval(timer)
-  }, [loading])
-
-  useEffect(() => {
-    if (
-      remaining !== 0 ||
-      timeoutSent.current
-    ) {
-      return
-    }
-
-    timeoutSent.current = true
-
-    async function finishByTimeout() {
-      const { error } = await supabase.rpc(
-        'timeout_act1',
-        {
-          p_game_code: gameCode,
-        }
-      )
-
-      if (error) {
-        console.error(error)
-        timeoutSent.current = false
-      }
-    }
-
-    finishByTimeout()
-  }, [remaining, gameCode])
-
-  async function completeObjective() {
+  async function resolveObjective(newResult) {
     setSubmitting(true)
     setErrorMessage('')
 
     const { data, error } = await supabase.rpc(
-      'complete_act1_objective',
+      'resolve_act1_objective',
       {
         p_game_code: gameCode,
         p_player_no: playerNo,
+        p_result: newResult,
       }
     )
 
     if (error) {
       console.error(error)
       setErrorMessage(
-        'Impossible de valider votre objectif.'
+        'Impossible d’enregistrer le résultat.'
       )
       setSubmitting(false)
       return
     }
 
-    setObjectiveDone(true)
+    setResult(newResult)
     setSubmitting(false)
 
     if (data?.finished) {
@@ -1027,13 +963,13 @@ function ActOneLive({
     }
   }
 
-  const minutes =
-    Math.floor(remaining / 60)
+  if (result !== 'pending') {
+    const labels = {
+      success: 'Objectif déclaré atteint.',
+      exposed: 'Objectif déclaré démasqué.',
+      abandoned: 'Objectif abandonné.',
+    }
 
-  const seconds =
-    String(remaining % 60).padStart(2, '0')
-
-  if (loading) {
     return (
       <main className="app">
         <section className="card">
@@ -1041,7 +977,19 @@ function ActOneLive({
             THE PACT / ACTE I
           </p>
 
-          <h2>Synchronisation...</h2>
+          <h2>Résultat verrouillé.</h2>
+
+          <div className="objective-confirmed">
+            {labels[result]}
+            <br />
+            Continuez normalement jusqu’à la résolution
+            de l’objectif adverse.
+          </div>
+
+          <div className="status">
+            <span className="status-dot"></span>
+            En attente de votre partenaire
+          </div>
         </section>
       </main>
     )
@@ -1056,10 +1004,6 @@ function ActOneLive({
 
         <h2>Le Signal.</h2>
 
-        <div className="timer">
-          {minutes}:{seconds}
-        </div>
-
         <p className="intro">
           Votre objectif secret est actif.
           Votre partenaire poursuit le sien.
@@ -1071,38 +1015,47 @@ function ActOneLive({
           </p>
 
           <p>
-            Continuez à interagir normalement.
-          </p>
-
-          <p>
             Essayez d’accomplir votre objectif
-            sans révéler ce que vous cherchez
-            à obtenir.
+            sans révéler ce que vous cherchez à obtenir.
           </p>
 
           <p>
-            Dès que vous estimez avoir réussi,
-            validez-le sur votre écran.
+            Décidez vous-même quand votre objectif
+            est résolu.
           </p>
         </div>
 
-        {objectiveDone ? (
-          <div className="objective-confirmed">
-            Objectif déclaré atteint.
-            <br />
-            Continuez à jouer normalement.
-          </div>
-        ) : (
+        <div className="action-stack">
           <button
             className="primary"
-            onClick={completeObjective}
+            onClick={() =>
+              resolveObjective('success')
+            }
             disabled={submitting}
           >
-            {submitting
-              ? 'Validation...'
-              : 'Objectif atteint'}
+            Objectif atteint
           </button>
-        )}
+
+          <button
+            className="secondary"
+            onClick={() =>
+              resolveObjective('exposed')
+            }
+            disabled={submitting}
+          >
+            Objectif démasqué
+          </button>
+
+          <button
+            className="tertiary-button"
+            onClick={() =>
+              resolveObjective('abandoned')
+            }
+            disabled={submitting}
+          >
+            J’abandonne cet objectif
+          </button>
+        </div>
 
         {errorMessage && (
           <p className="error-message">
@@ -1111,8 +1064,7 @@ function ActOneLive({
         )}
 
         <p className="warning-text">
-          Votre validation reste privée jusqu’à
-          la fin de l’acte.
+          Votre choix reste privé jusqu’à la révélation.
         </p>
       </section>
     </main>
@@ -1136,8 +1088,8 @@ function ActOneReveal({
         .select(`
           player1_objective,
           player2_objective,
-          player1_act1_done,
-          player2_act1_done,
+          player1_act1_result,
+          player2_act1_result
           act1_advantage,
           status
         `)
@@ -1180,6 +1132,13 @@ function ActOneReveal({
         }
       )
       .subscribe()
+
+      const resultLabels = {
+  success: 'RÉUSSI',
+  exposed: 'DÉMASQUÉ',
+  abandoned: 'ABANDONNÉ',
+  pending: 'NON RÉSOLU',
+}
 
     return () => {
       supabase.removeChannel(channel)
@@ -1242,9 +1201,7 @@ function ActOneReveal({
           </p>
 
           <strong>
-            {game.player1_act1_done
-              ? 'RÉUSSI'
-              : 'NON VALIDÉ'}
+            {resultLabels[game.player1_act1_result]}
           </strong>
         </div>
 
@@ -1258,9 +1215,8 @@ function ActOneReveal({
           </p>
 
           <strong>
-            {game.player2_act1_done
-              ? 'RÉUSSI'
-              : 'NON VALIDÉ'}
+            {resultLabels[game.player2_act1_result]}
+            
           </strong>
         </div>
 
