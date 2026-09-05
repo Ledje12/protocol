@@ -690,6 +690,9 @@ function SecretObjective({
 }) {
   const [objective, setObjective] = useState('')
   const [loading, setLoading] = useState(true)
+  const [confirming, setConfirming] = useState(false)
+  const [waiting, setWaiting] = useState(false)
+  const [errorMessage, setErrorMessage] = useState('')
 
   useEffect(() => {
     async function loadObjective() {
@@ -706,6 +709,9 @@ function SecretObjective({
 
       if (error) {
         console.error(error)
+        setErrorMessage(
+          'Impossible de charger votre objectif.'
+        )
         setLoading(false)
         return
       }
@@ -717,6 +723,60 @@ function SecretObjective({
     loadObjective()
   }, [gameCode, playerNo])
 
+  useEffect(() => {
+    const channel = supabase
+      .channel(`objective-ready-${gameCode}-${playerNo}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'games',
+          filter: `code=eq.${gameCode}`,
+        },
+        (payload) => {
+          if (payload.new.status === 'act1_live') {
+            onContinue()
+          }
+        }
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [gameCode, playerNo, onContinue])
+
+  async function confirmObjective() {
+    setConfirming(true)
+    setErrorMessage('')
+
+    const { data, error } = await supabase.rpc(
+      'confirm_secret_objective',
+      {
+        p_game_code: gameCode,
+        p_player_no: playerNo,
+      }
+    )
+
+    if (error) {
+      console.error(error)
+      setErrorMessage(
+        'Impossible de valider votre objectif.'
+      )
+      setConfirming(false)
+      return
+    }
+
+    if (data?.both_ready) {
+      onContinue()
+      return
+    }
+
+    setWaiting(true)
+    setConfirming(false)
+  }
+
   if (loading) {
     return (
       <main className="app">
@@ -726,6 +786,30 @@ function SecretObjective({
           </p>
 
           <h2>Préparation...</h2>
+        </section>
+      </main>
+    )
+  }
+
+  if (waiting) {
+    return (
+      <main className="app">
+        <section className="card">
+          <p className="eyebrow">
+            THE PACT / SECRET
+          </p>
+
+          <h2>Objectif verrouillé.</h2>
+
+          <p className="intro">
+            Votre instruction est active.
+            Attendez que votre partenaire soit prêt.
+          </p>
+
+          <div className="status">
+            <span className="status-dot"></span>
+            Synchronisation en cours
+          </div>
         </section>
       </main>
     )
@@ -748,18 +832,29 @@ function SecretObjective({
           Ne montrez pas cet écran à votre partenaire.
         </p>
 
+        {errorMessage && (
+          <p className="error-message">
+            {errorMessage}
+          </p>
+        )}
+
         <button
           className="primary"
-          onClick={onContinue}
+          onClick={confirmObjective}
+          disabled={confirming}
         >
-          J’ai compris
+          {confirming
+            ? 'Validation...'
+            : 'J’ai compris'}
         </button>
       </section>
     </main>
   )
 }
 
-function ActOneLive() {
+function ActOneLive({
+  playerNo,
+}) {
   return (
     <main className="app">
       <section className="card">
@@ -767,16 +862,41 @@ function ActOneLive() {
           THE PACT / ACTE I
         </p>
 
-        <h2>Observez. Testez. Jouez.</h2>
+        <h2>Le Signal.</h2>
 
         <p className="intro">
-          Votre objectif est actif.
-          Votre partenaire poursuit le sien.
+          Votre objectif secret est maintenant actif.
+        </p>
+
+        <div className="protocol-box">
+          <p className="protocol-number">
+            PROTOCOLE 01
+          </p>
+
+          <p>
+            Pendant les prochaines minutes,
+            comportez-vous normalement.
+          </p>
+
+          <p>
+            Essayez d’accomplir votre objectif
+            sans révéler son existence.
+          </p>
+
+          <p>
+            Observez attentivement les réactions
+            de votre partenaire.
+          </p>
+        </div>
+
+        <p className="warning-text">
+          Votre partenaire poursuit lui aussi
+          un objectif que vous ignorez.
         </p>
 
         <div className="status">
           <span className="status-dot"></span>
-          Acte I en cours
+          Objectif actif · Joueur {playerNo}
         </div>
       </section>
     </main>
@@ -924,8 +1044,12 @@ function App() {
   }
 
   if (screen === 'act1-live') {
-    return <ActOneLive />
-  }
+  return (
+    <ActOneLive
+      playerNo={playerNo}
+    />
+  )
+}
 
   return (
     <Home
