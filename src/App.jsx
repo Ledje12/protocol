@@ -13,6 +13,196 @@ function generateGameCode() {
   return code
 }
 
+const ACTION_LIBRARY = [
+  {
+    id: 'sensory_eyes_closed',
+    group: 'initiative',
+    title: 'Sans regarder',
+    text:
+      'Fermez les yeux. Votre partenaire dispose de deux minutes pour créer une interaction uniquement basée sur le toucher, sans vous annoncer ce qu’il va faire.',
+    intensity: 2,
+    requires: {
+      sensory: 1,
+      surprise: 1,
+    },
+  },
+
+  {
+    id: 'provocation_one_request',
+    group: 'initiative',
+    title: 'Une demande',
+    text:
+      'Formulez une demande précise à votre partenaire. Elle doit rester dans les limites établies par PROTOCOL. Votre partenaire choisit librement de l’accepter ou de passer.',
+    intensity: 2,
+    requires: {
+      provocation: 1,
+    },
+  },
+
+  {
+    id: 'control_choose_position',
+    group: 'initiative',
+    title: 'Prenez l’initiative',
+    text:
+      'Pendant les trois prochaines minutes, vous choisissez où chacun se place et la manière dont l’interaction commence.',
+    intensity: 2,
+    requires: {
+      control: 1,
+      surrender: 1,
+    },
+  },
+
+  {
+    id: 'sensory_slow_contact',
+    group: 'initiative',
+    title: 'Ralentir',
+    text:
+      'Choisissez une forme de contact physique simple et faites-la durer volontairement plus longtemps que d’habitude.',
+    intensity: 1,
+    requires: {
+      sensory: 1,
+    },
+  },
+
+  {
+    id: 'provocation_forbidden_word',
+    group: 'initiative',
+    title: 'Provocation',
+    text:
+      'Choisissez une phrase ou une question que vous savez légèrement provocante. Dites-la une seule fois, puis laissez votre partenaire décider de la suite.',
+    intensity: 2,
+    requires: {
+      provocation: 1,
+      improvisation: 1,
+    },
+  },
+
+  {
+    id: 'restraint_hands_still',
+    group: 'constraint',
+    title: 'Mains immobiles',
+    text:
+      'Pendant deux minutes, gardez les mains immobiles. Votre partenaire décide de la proximité et du rythme de l’interaction.',
+    intensity: 2,
+    requires: {
+      restraint: 1,
+      surrender: 1,
+    },
+  },
+
+  {
+    id: 'control_permission',
+    group: 'constraint',
+    title: 'Permission',
+    text:
+      'Pendant trois minutes, avant de changer volontairement l’interaction, demandez simplement la permission à votre partenaire.',
+    intensity: 3,
+    requires: {
+      control: 1,
+      surrender: 1,
+    },
+  },
+
+  {
+    id: 'sensory_no_words',
+    group: 'constraint',
+    title: 'Sans mots',
+    text:
+      'Pendant deux minutes, ne donnez aucune instruction verbale. Vous pouvez toujours interrompre immédiatement l’action si nécessaire.',
+    intensity: 2,
+    requires: {
+      sensory: 1,
+    },
+  },
+
+  {
+    id: 'restraint_stay_where_you_are',
+    group: 'constraint',
+    title: 'Restez là',
+    text:
+      'Pendant deux minutes, restez à l’endroit choisi par votre partenaire. Vous pouvez bouger ou arrêter immédiatement si vous le souhaitez.',
+    intensity: 2,
+    requires: {
+      restraint: 1,
+      surrender: 1,
+    },
+  },
+
+  {
+    id: 'surprise_partner_decides',
+    group: 'constraint',
+    title: 'Ne choisissez pas',
+    text:
+      'Pour la prochaine interaction, laissez votre partenaire choisir entre deux possibilités compatibles avec vos limites communes.',
+    intensity: 2,
+    requires: {
+      surprise: 1,
+      surrender: 1,
+    },
+  },
+]
+
+function isActionAllowed(action, profile) {
+  if (!profile) {
+    return false
+  }
+
+  if (
+    action.intensity &&
+    action.intensity > profile.intensity
+  ) {
+    return false
+  }
+
+  for (const [dimension, minimum] of Object.entries(
+    action.requires ?? {}
+  )) {
+    if ((profile[dimension] ?? 0) < minimum) {
+      return false
+    }
+  }
+
+  return true
+}
+
+function getCompatibleActions(
+  profile,
+  group
+) {
+  return ACTION_LIBRARY.filter(
+    (action) =>
+      action.group === group &&
+      isActionAllowed(action, profile)
+  )
+}
+
+function hashString(value) {
+  let hash = 0
+
+  for (let i = 0; i < value.length; i++) {
+    hash =
+      (hash * 31 + value.charCodeAt(i)) >>> 0
+  }
+
+  return hash
+}
+
+function pickCompatibleAction(
+  actions,
+  gameCode,
+  group
+) {
+  if (actions.length === 0) {
+    return null
+  }
+
+  const index =
+    hashString(`${gameCode}-${group}`) %
+    actions.length
+
+  return actions[index]
+}
+
 function Home({ onCreate, onJoin }) {
   return (
     <main className="app">
@@ -1780,29 +1970,105 @@ function ActTwoEffect({
 }
 
 function ActTwoBlindReveal({
+  gameCode,
   result,
 }) {
-  const content = {
-    initiative: {
-      title: 'Initiative',
-      text:
-        'Vous obtenez la prochaine initiative. ' +
-        'Proposez librement la prochaine action.',
-    },
+  const [action, setAction] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [errorMessage, setErrorMessage] = useState('')
 
-    constraint: {
-      title: 'Contrainte',
-      text:
-        'Votre prochaine décision devra respecter une règle imposée par PROTOCOL.',
-    },
+  useEffect(() => {
+    async function loadAction() {
+      const { data, error } = await supabase
+        .from('games')
+        .select('shared_profile')
+        .eq('code', gameCode)
+        .single()
+
+      if (error) {
+        console.error(error)
+        setErrorMessage(
+          'Impossible de préparer cette action.'
+        )
+        setLoading(false)
+        return
+      }
+
+      const group =
+        result === 'initiative'
+          ? 'initiative'
+          : 'constraint'
+
+      const compatibleActions =
+        getCompatibleActions(
+          data.shared_profile,
+          group
+        )
+
+      const selected =
+        pickCompatibleAction(
+          compatibleActions,
+          gameCode,
+          group
+        )
+
+      setAction(selected)
+      setLoading(false)
+    }
+
+    loadAction()
+  }, [gameCode, result])
+
+  if (loading) {
+    return (
+      <main className="app">
+        <section className="card">
+          <p className="eyebrow">
+            THE PACT / ACTE II
+          </p>
+
+          <h2>Conséquence en préparation...</h2>
+        </section>
+      </main>
+    )
   }
 
-  const selected =
-    content[result] ?? {
-      title: 'Résultat inconnu',
-      text:
-        'PROTOCOL n’a pas pu identifier cette conséquence.',
-    }
+  if (!action) {
+    return (
+      <main className="app">
+        <section className="card">
+          <p className="eyebrow">
+            THE PACT / ACTE II
+          </p>
+
+          <h2>Alternative.</h2>
+
+          <p className="intro">
+            Aucune action compatible n’a été trouvée
+            pour cette conséquence.
+          </p>
+
+          <div className="protocol-box">
+            <p className="protocol-number">
+              RÈGLE NEUTRE
+            </p>
+
+            <p>
+              Choisissez ensemble une interaction
+              qui reste clairement dans votre zone
+              de confort commune.
+            </p>
+          </div>
+
+          {errorMessage && (
+            <p className="error-message">
+              {errorMessage}
+            </p>
+          )}
+        </section>
+      </main>
+    )
+  }
 
   return (
     <main className="app">
@@ -1815,13 +2081,27 @@ function ActTwoBlindReveal({
 
         <div className="protocol-box">
           <p className="protocol-number">
-            {selected.title.toUpperCase()}
+            {action.title.toUpperCase()}
           </p>
 
           <p>
-            {selected.text}
+            {action.text}
           </p>
         </div>
+
+        <div className="result-box">
+          <span>Intensité</span>
+
+          <strong>
+            {action.intensity} / 5
+          </strong>
+        </div>
+
+        <p className="warning-text">
+          Cette action a été sélectionnée dans
+          votre profil commun. Elle peut toujours
+          être interrompue ou passée.
+        </p>
       </section>
     </main>
   )
@@ -2023,6 +2303,7 @@ if (screen === 'act2-effect') {
 if (screen === 'act2-blind-reveal') {
   return (
     <ActTwoBlindReveal
+      gameCode={gameCode}
       result={act2BlindResult}
     />
   )
