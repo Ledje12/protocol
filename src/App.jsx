@@ -1307,26 +1307,29 @@ function ActTwoIntro({
   onEffect,
 }) {
   const [advantage, setAdvantage] = useState(null)
+  const [sharedProfile, setSharedProfile] = useState(null)
   const [loading, setLoading] = useState(true)
   const [choosing, setChoosing] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
-  const [sharedProfile, setSharedProfile] = useState(null)
 
   useEffect(() => {
     async function loadActTwo() {
       const { data, error } = await supabase
         .from('games')
         .select(`
-  act1_advantage,
-  act2_power,
-  status,
-  shared_profile
-`)
+          act1_advantage,
+          act2_power,
+          status,
+          shared_profile
+        `)
         .eq('code', gameCode)
         .single()
 
       if (error) {
         console.error(error)
+        setErrorMessage(
+          'Impossible de charger l’Acte II.'
+        )
         setLoading(false)
         return
       }
@@ -1362,33 +1365,6 @@ function ActTwoIntro({
         }
       )
       .subscribe()
-
-      const availablePowers = [
-  {
-    key: 'silence',
-    title: 'Silence',
-    description:
-      'Pendant une courte période, certaines communications deviennent interdites.',
-    allowed: true,
-  },
-  {
-    key: 'permission',
-    title: 'Permission',
-    description:
-      'Certaines actions nécessiteront temporairement votre validation.',
-    allowed:
-      sharedProfile?.control >= 1 &&
-      sharedProfile?.surrender >= 1,
-  },
-  {
-    key: 'blind_choice',
-    title: 'Choix à l’aveugle',
-    description:
-      'Votre partenaire devra choisir entre deux options sans connaître leurs conséquences.',
-    allowed:
-      sharedProfile?.surprise >= 1,
-  },
-].filter((power) => power.allowed)
 
     return () => {
       supabase.removeChannel(channel)
@@ -1429,6 +1405,12 @@ function ActTwoIntro({
           </p>
 
           <h2>Préparation...</h2>
+
+          {errorMessage && (
+            <p className="error-message">
+              {errorMessage}
+            </p>
+          )}
         </section>
       </main>
     )
@@ -1436,6 +1418,33 @@ function ActTwoIntro({
 
   const hasAdvantage =
     advantage === playerNo
+
+  const availablePowers = [
+    {
+      key: 'silence',
+      title: 'Silence',
+      description:
+        'Pendant une courte période, certaines communications deviennent interdites.',
+      allowed: true,
+    },
+    {
+      key: 'permission',
+      title: 'Permission',
+      description:
+        'Certaines actions nécessiteront temporairement votre validation.',
+      allowed:
+        sharedProfile?.control >= 1 &&
+        sharedProfile?.surrender >= 1,
+    },
+    {
+      key: 'blind_choice',
+      title: 'Choix à l’aveugle',
+      description:
+        'Votre partenaire devra choisir entre deux options sans connaître leurs conséquences.',
+      allowed:
+        sharedProfile?.surprise >= 1,
+    },
+  ].filter((power) => power.allowed)
 
   if (advantage === null) {
     return (
@@ -1504,21 +1513,23 @@ function ActTwoIntro({
         </p>
 
         {availablePowers.map((power) => (
-  <button
-    key={power.key}
-    className="power-card"
-    onClick={() => choosePower(power.key)}
-    disabled={choosing}
-  >
-    <span className="power-title">
-      {power.title}
-    </span>
+          <button
+            key={power.key}
+            className="power-card"
+            onClick={() =>
+              choosePower(power.key)
+            }
+            disabled={choosing}
+          >
+            <span className="power-title">
+              {power.title}
+            </span>
 
-    <span className="power-description">
-      {power.description}
-    </span>
-  </button>
-))}
+            <span className="power-description">
+              {power.description}
+            </span>
+          </button>
+        ))}
 
         {errorMessage && (
           <p className="error-message">
