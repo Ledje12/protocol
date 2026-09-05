@@ -187,3 +187,124 @@ h2 {
   color: #d4a6a6;
   text-align: center;
 }
+
+.calibration-card {
+  max-width: 520px;
+}
+
+.calibration-section {
+  margin-bottom: 32px;
+  padding-bottom: 28px;
+
+  border-bottom:
+    1px solid rgba(255, 255, 255, 0.08);
+}
+
+.calibration-label {
+  margin: 0 0 7px;
+
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+
+  text-transform: uppercase;
+  color: #d7cfe0;
+}
+
+.calibration-description {
+  margin: 0 0 15px;
+
+  font-size: 14px;
+  line-height: 1.5;
+  color: #85858f;
+}
+
+.answer-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.intensity-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 8px;
+}
+
+.choice-button {
+  min-height: 46px;
+
+  border:
+    1px solid rgba(255, 255, 255, 0.12);
+
+  border-radius: 11px;
+
+  background:
+    rgba(255, 255, 255, 0.03);
+
+  color: #aaaab3;
+
+  font-weight: 600;
+  cursor: pointer;
+
+  transition:
+    background 150ms ease,
+    border-color 150ms ease,
+    color 150ms ease,
+    transform 150ms ease;
+}
+
+.choice-button:hover {
+  transform: translateY(-1px);
+
+  border-color:
+    rgba(255, 255, 255, 0.25);
+}
+
+.choice-button.selected {
+  background: #eee9f3;
+  border-color: #eee9f3;
+  color: #111114;
+}
+
+.result-box {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+
+  margin: 30px 0;
+  padding: 20px;
+
+  border:
+    1px solid rgba(255, 255, 255, 0.12);
+
+  border-radius: 14px;
+
+  background:
+    rgba(255, 255, 255, 0.035);
+}
+
+.result-box span {
+  font-size: 14px;
+  color: #9999a3;
+}
+
+.result-box strong {
+  font-size: 22px;
+}
+
+.secret-box {
+  margin: 30px 0;
+  padding: 24px;
+
+  border:
+    1px solid rgba(255, 255, 255, 0.14);
+
+  border-radius: 16px;
+
+  background:
+    rgba(255, 255, 255, 0.045);
+
+  font-size: 18px;
+  line-height: 1.55;
+}

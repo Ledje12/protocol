@@ -262,25 +262,275 @@ function JoinGame({ onBack, onJoined }) {
   )
 }
 
-function Calibration() {
+function Calibration({
+  gameCode,
+  playerNo,
+  onReady,
+}) {
+  const [intensity, setIntensity] = useState(3)
+
+  const [answers, setAnswers] = useState({
+    surprise: 1,
+    control: 1,
+    surrender: 1,
+    sensory: 1,
+    restraint: 1,
+    competition: 1,
+    provocation: 1,
+    improvisation: 1,
+  })
+
+  const [submitted, setSubmitted] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const [errorMessage, setErrorMessage] = useState('')
+
+  const dimensions = [
+  {
+    key: 'surprise',
+    label: 'Surprise',
+    description: 'Instructions ou conséquences inattendues.',
+  },
+  {
+    key: 'control',
+    label: 'Contrôle',
+    description: 'Prendre temporairement le contrôle de certaines décisions ou règles.',
+  },
+  {
+    key: 'surrender',
+    label: 'Lâcher-prise',
+    description: 'Laisser temporairement votre partenaire prendre les commandes.',
+  },
+  {
+    key: 'sensory',
+    label: 'Sensoriel',
+    description: 'Défis basés sur le toucher, les sons ou l’anticipation.',
+  },
+  {
+    key: 'restraint',
+    label: 'Contraintes',
+    description: 'Restrictions ou limitations temporaires convenues.',
+  },
+  {
+    key: 'competition',
+    label: 'Compétition',
+    description: 'Gagner, perdre ou obtenir des avantages.',
+  },
+  {
+    key: 'provocation',
+    label: 'Provocation',
+    description: 'Taquiner, défier ou pousser le jeu plus loin.',
+  },
+  {
+    key: 'improvisation',
+    label: 'Improvisation',
+    description: 'Interactions moins scriptées et choix plus spontanés.',
+  },
+]
+
+  function updateAnswer(key, value) {
+    setAnswers((current) => ({
+      ...current,
+      [key]: value,
+    }))
+  }
+
+  async function submitCalibration() {
+    setLoading(true)
+    setErrorMessage('')
+
+    const payload = {
+      intensity,
+      ...answers,
+    }
+
+    const { data, error } = await supabase.rpc(
+      'submit_calibration',
+      {
+        p_game_code: gameCode,
+        p_player_no: playerNo,
+        p_answers: payload,
+      }
+    )
+
+    if (error) {
+      console.error(error)
+      setErrorMessage(
+        'Calibration could not be submitted.'
+      )
+      setLoading(false)
+      return
+    }
+
+    setSubmitted(true)
+    setLoading(false)
+
+    if (data?.ready) {
+      onReady(data.shared_profile)
+    }
+  }
+
+  useEffect(() => {
+    const channel = supabase
+      .channel(`calibration-${gameCode}-${playerNo}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'games',
+          filter: `code=eq.${gameCode}`,
+        },
+        (payload) => {
+          if (
+            payload.new.status ===
+            'calibration_ready'
+          ) {
+            onReady(payload.new.shared_profile)
+          }
+        }
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [gameCode, playerNo, onReady])
+
+  if (submitted) {
+    return (
+      <main className="app">
+        <section className="card">
+          <p className="eyebrow">
+            PROTOCOL / CALIBRATION
+          </p>
+
+          <h2>Calibration validée.</h2>
+
+<p className="intro">
+  Vos réponses ont été enregistrées de manière privée.
+  En attente de votre partenaire.
+</p>
+
+          <div className="status">
+            <span className="status-dot"></span>
+            En attente du joueur {playerNo === 1 ? '2' : '1'}
+          </div>
+        </section>
+      </main>
+    )
+  }
+
   return (
     <main className="app">
-      <section className="card">
+      <section className="card calibration-card">
         <p className="eyebrow">
           PROTOCOL / CALIBRATION
         </p>
 
-        <h2>Set your boundaries.</h2>
+        <h2>Définissez vos limites.</h2>
 
-        <p className="intro">
-          Your answers are private.
-          Your partner will never see your individual choices.
-        </p>
+<p className="intro">
+  Vos réponses sont privées.
+  Votre partenaire ne verra jamais vos choix individuels.
+</p>
 
-        <div className="status">
-          <span className="status-dot"></span>
-          Private calibration active
+        <div className="calibration-section">
+          <p className="calibration-label">
+  INTENSITÉ
+</p>
+
+<p className="calibration-description">
+  Jusqu’où PROTOCOL peut-il aller dans la partie de ce soir ?
+</p>
+
+          <div className="intensity-grid">
+            {[1, 2, 3, 4, 5].map((value) => (
+              <button
+                key={value}
+                className={
+                  intensity === value
+                    ? 'choice-button selected'
+                    : 'choice-button'
+                }
+                onClick={() => setIntensity(value)}
+              >
+                {value}
+              </button>
+            ))}
+          </div>
         </div>
+
+        {dimensions.map((dimension) => (
+          <div
+            className="calibration-section"
+            key={dimension.key}
+          >
+            <p className="calibration-label">
+              {dimension.label}
+            </p>
+
+            <p className="calibration-description">
+              {dimension.description}
+            </p>
+
+            <div className="answer-grid">
+              <button
+                className={
+                  answers[dimension.key] === 0
+                    ? 'choice-button selected'
+                    : 'choice-button'
+                }
+                onClick={() =>
+                  updateAnswer(dimension.key, 0)
+                }
+              >
+                Non
+              </button>
+
+              <button
+                className={
+                  answers[dimension.key] === 1
+                    ? 'choice-button selected'
+                    : 'choice-button'
+                }
+                onClick={() =>
+                  updateAnswer(dimension.key, 1)
+                }
+              >
+                Peut-être
+              </button>
+
+              <button
+                className={
+                  answers[dimension.key] === 2
+                    ? 'choice-button selected'
+                    : 'choice-button'
+                }
+                onClick={() =>
+                  updateAnswer(dimension.key, 2)
+                }
+              >
+                Oui
+              </button>
+            </div>
+          </div>
+        ))}
+
+        {errorMessage && (
+          <p className="error-message">
+            {errorMessage}
+          </p>
+        )}
+
+        <button
+          className="primary"
+          onClick={submitCalibration}
+          disabled={loading}
+        >
+          {loading
+  ? 'Validation...'
+  : 'Valider mes choix'}
+        </button>
       </section>
     </main>
   )
@@ -347,80 +597,335 @@ function JoinedGame({
   )
 }
 
+function CalibrationReady({
+  sharedProfile,
+  onStart,
+}) {
+  return (
+    <main className="app">
+      <section className="card">
+        <p className="eyebrow">
+          PROTOCOL / PRÊT
+        </p>
+
+        <h2>Compatibilité établie.</h2>
+
+        <p className="intro">
+          PROTOCOL a défini votre zone de jeu commune.
+          Vos réponses individuelles restent privées.
+        </p>
+
+        <div className="result-box">
+          <span>
+            Intensité commune
+          </span>
+
+          <strong>
+            {sharedProfile?.intensity ?? '—'} / 5
+          </strong>
+        </div>
+
+        <div className="status">
+          <span className="status-dot"></span>
+          Calibration terminée
+        </div>
+
+        <button
+  className="primary"
+  onClick={onStart}
+>
+  Commencer THE PACT
+</button>
+      </section>
+    </main>
+  )
+}
+
+function ThePactIntro({
+  gameCode,
+  playerNo,
+  onContinue,
+}) {
+  return (
+    <main className="app">
+      <section className="card">
+        <p className="eyebrow">
+          THE PACT / ACTE I
+        </p>
+
+        <h2>Le Pacte commence.</h2>
+
+        <p className="intro">
+          Pendant cette partie, vous ne recevrez pas toujours
+          les mêmes informations.
+        </p>
+
+        <p className="intro">
+          Certaines règles, intentions et objectifs resteront
+          volontairement secrets.
+        </p>
+
+        <div className="result-box">
+          <span>Votre rôle</span>
+          <strong>
+            Joueur {playerNo}
+          </strong>
+        </div>
+
+        <button
+          className="primary"
+          onClick={onContinue}
+        >
+          Recevoir mon instruction
+        </button>
+      </section>
+    </main>
+  )
+}
+
+function SecretObjective({
+  gameCode,
+  playerNo,
+  onContinue,
+}) {
+  const [objective, setObjective] = useState('')
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    async function loadObjective() {
+      const field =
+        playerNo === 1
+          ? 'player1_objective'
+          : 'player2_objective'
+
+      const { data, error } = await supabase
+        .from('games')
+        .select(field)
+        .eq('code', gameCode)
+        .single()
+
+      if (error) {
+        console.error(error)
+        setLoading(false)
+        return
+      }
+
+      setObjective(data[field])
+      setLoading(false)
+    }
+
+    loadObjective()
+  }, [gameCode, playerNo])
+
+  if (loading) {
+    return (
+      <main className="app">
+        <section className="card">
+          <p className="eyebrow">
+            THE PACT
+          </p>
+
+          <h2>Préparation...</h2>
+        </section>
+      </main>
+    )
+  }
+
+  return (
+    <main className="app">
+      <section className="card">
+        <p className="eyebrow">
+          THE PACT / SECRET
+        </p>
+
+        <h2>Votre objectif.</h2>
+
+        <div className="secret-box">
+          {objective}
+        </div>
+
+        <p className="intro">
+          Ne montrez pas cet écran à votre partenaire.
+        </p>
+
+        <button
+          className="primary"
+          onClick={onContinue}
+        >
+          J’ai compris
+        </button>
+      </section>
+    </main>
+  )
+}
+
+function ActOneLive() {
+  return (
+    <main className="app">
+      <section className="card">
+        <p className="eyebrow">
+          THE PACT / ACTE I
+        </p>
+
+        <h2>Observez. Testez. Jouez.</h2>
+
+        <p className="intro">
+          Votre objectif est actif.
+          Votre partenaire poursuit le sien.
+        </p>
+
+        <div className="status">
+          <span className="status-dot"></span>
+          Acte I en cours
+        </div>
+      </section>
+    </main>
+  )
+}
+
 function App() {
   const [screen, setScreen] = useState('home')
   const [gameCode, setGameCode] = useState('')
   const [joinedGame, setJoinedGame] = useState(null)
+  const [playerNo, setPlayerNo] = useState(null)
+  const [sharedProfile, setSharedProfile] = useState(null)
 
   async function createGame() {
-  const code = generateGameCode()
+    const code = generateGameCode()
 
-  const { data, error } = await supabase
-    .from('games')
-    .insert({
-      code,
-      status: 'waiting',
-      player_count: 1,
-    })
-    .select()
-    .single()
+    const { data, error } = await supabase
+      .from('games')
+      .insert({
+        code,
+        status: 'waiting',
+        player_count: 1,
+      })
+      .select()
+      .single()
 
-  if (error) {
-    console.error(error)
-    return
+    if (error) {
+      console.error(error)
+      return
+    }
+
+    console.log('Game created:', data)
+
+    setPlayerNo(1)
+    setGameCode(code)
+    setScreen('lobby')
   }
 
-  console.log('Game created:', data)
+  async function startThePact() {
+    const { error } = await supabase.rpc(
+      'start_the_pact',
+      {
+        p_game_code: gameCode,
+      }
+    )
 
-  setGameCode(code)
-  setScreen('lobby')
-}
+    if (error) {
+      console.error(error)
+      return
+    }
+
+    setScreen('the-pact-intro')
+  }
 
   function goHome() {
     setGameCode('')
+    setPlayerNo(null)
+    setSharedProfile(null)
+    setJoinedGame(null)
     setScreen('home')
   }
 
   if (screen === 'lobby') {
-  return (
-    <Lobby
-      gameCode={gameCode}
-      onBack={goHome}
-      onBegin={() =>
-        setScreen('calibration')
-      }
-    />
-  )
-}
+    return (
+      <Lobby
+        gameCode={gameCode}
+        onBack={goHome}
+        onBegin={() =>
+          setScreen('calibration')
+        }
+      />
+    )
+  }
 
   if (screen === 'join') {
-  return (
-    <JoinGame
-      onBack={goHome}
-      onJoined={(game) => {
-        setJoinedGame(game)
-        setGameCode(game.code)
-        setScreen('joined')
-      }}
-    />
-  )
-}
+    return (
+      <JoinGame
+        onBack={goHome}
+        onJoined={(game) => {
+          setJoinedGame(game)
+          setPlayerNo(2)
+          setGameCode(game.code)
+          setScreen('joined')
+        }}
+      />
+    )
+  }
 
-if (screen === 'joined') {
-  return (
-    <JoinedGame
-      gameCode={gameCode}
-      onBack={goHome}
-      onBegin={() =>
-        setScreen('calibration')
-      }
-    />
-  )
-}
+  if (screen === 'joined') {
+    return (
+      <JoinedGame
+        gameCode={gameCode}
+        onBack={goHome}
+        onBegin={() =>
+          setScreen('calibration')
+        }
+      />
+    )
+  }
 
-if (screen === 'calibration') {
-  return <Calibration />
-}
+  if (screen === 'calibration') {
+    return (
+      <Calibration
+        gameCode={gameCode}
+        playerNo={playerNo}
+        onReady={(profile) => {
+          setSharedProfile(profile)
+          setScreen('calibration-ready')
+        }}
+      />
+    )
+  }
+
+  if (screen === 'calibration-ready') {
+    return (
+      <CalibrationReady
+        sharedProfile={sharedProfile}
+        onStart={startThePact}
+      />
+    )
+  }
+
+  if (screen === 'the-pact-intro') {
+    return (
+      <ThePactIntro
+        gameCode={gameCode}
+        playerNo={playerNo}
+        onContinue={() =>
+          setScreen('secret-objective')
+        }
+      />
+    )
+  }
+
+  if (screen === 'secret-objective') {
+    return (
+      <SecretObjective
+        gameCode={gameCode}
+        playerNo={playerNo}
+        onContinue={() =>
+          setScreen('act1-live')
+        }
+      />
+    )
+  }
+
+  if (screen === 'act1-live') {
+    return <ActOneLive />
+  }
 
   return (
     <Home
