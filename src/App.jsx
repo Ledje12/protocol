@@ -370,6 +370,132 @@ const ACTION_LIBRARY = [
   text:
     'Pendant une minute, communiquez uniquement par gestes et contact. Après cette minute, vous pouvez reprendre la parole pour résoudre le verrou.',
 },
+
+{
+  id: 'sensual_whisper_desire',
+  category: 'provocation',
+  group: 'initiative',
+  target: 'holder',
+  intensity: 3,
+  requires: {
+    provocation: 1,
+    improvisation: 1,
+  },
+  title: 'À voix basse',
+  text:
+    'Approchez-vous suffisamment pour parler très bas. Dites à votre partenaire une chose que vous aimeriez qu’il fasse, sans lui demander de la faire immédiatement.',
+},
+
+{
+  id: 'sensual_choose_contact',
+  category: 'sensory',
+  group: 'initiative',
+  target: 'holder',
+  intensity: 3,
+  requires: {
+    sensory: 1,
+    control: 1,
+  },
+  title: 'Choisissez',
+  text:
+    'Choisissez une zone de contact clairement autorisée par votre partenaire et imposez un rythme volontairement lent pendant deux minutes.',
+},
+
+{
+  id: 'sensual_no_hands',
+  category: 'restraint',
+  group: 'constraint',
+  target: 'partner',
+  intensity: 3,
+  requires: {
+    restraint: 1,
+    surrender: 1,
+    sensory: 1,
+  },
+  title: 'Sans les mains',
+  text:
+    'Pendant deux minutes, gardez les mains hors de l’interaction et laissez votre partenaire gérer la proximité et le rythme.',
+},
+
+{
+  id: 'sensual_one_order',
+  category: 'control',
+  group: 'constraint',
+  target: 'partner',
+  intensity: 4,
+  requires: {
+    control: 2,
+    surrender: 2,
+  },
+  title: 'Une consigne',
+  text:
+    'Votre partenaire peut vous donner une consigne précise concernant votre position, votre proximité ou la manière de poursuivre. Vous pouvez la modifier ou la refuser.',
+},
+
+{
+  id: 'sensual_eyes_closed_choice',
+  category: 'surprise',
+  group: 'constraint',
+  target: 'partner',
+  intensity: 4,
+  requires: {
+    surprise: 2,
+    sensory: 2,
+    surrender: 1,
+  },
+  title: 'Ne regardez pas',
+  text:
+    'Fermez les yeux. Votre partenaire choisit une interaction sensorielle dans votre zone commune sans vous annoncer à l’avance laquelle.',
+},
+
+{
+  id: 'sensual_permission_loop',
+  category: 'control',
+  group: 'constraint',
+  target: 'partner',
+  intensity: 4,
+  requires: {
+    control: 2,
+    surrender: 2,
+    provocation: 1,
+  },
+  title: 'Demandez',
+  text:
+    'Pour les trois prochaines minutes, avant chaque changement volontaire dans l’interaction, demandez simplement : « Je peux ? »',
+},
+
+{
+  id: 'sensual_full_lead',
+  category: 'control',
+  group: 'constraint',
+  target: 'partner',
+  intensity: 5,
+  requires: {
+    control: 2,
+    surrender: 2,
+    sensory: 2,
+    provocation: 2,
+  },
+  title: 'Laissez faire',
+  text:
+    'Pendant trois minutes, laissez votre partenaire diriger entièrement le rythme et l’évolution de l’interaction dans les limites déjà établies. Vous gardez à tout moment le droit de passer ou d’interrompre.',
+},
+
+{
+  id: 'sensual_confession',
+  category: 'provocation',
+  group: 'initiative',
+  target: 'both',
+  intensity: 5,
+  requires: {
+    provocation: 2,
+    improvisation: 2,
+  },
+  title: 'Dites ce que vous voulez',
+  text:
+    'À tour de rôle, formulez clairement une envie que vous n’avez pas encore exprimée pendant la partie. L’autre répond uniquement : oui, peut-être, ou pas ce soir.',
+},
+
 ]
 
 function isActionAllowed(action, profile) {
@@ -1303,19 +1429,32 @@ function SecretObjective({
   const [confirming, setConfirming] = useState(false)
   const [waiting, setWaiting] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
+  const [role, setRole] = useState('')
 
   useEffect(() => {
     async function loadObjective() {
-      const field =
-        playerNo === 1
-          ? 'player1_objective'
-          : 'player2_objective'
+      const objectiveField =
+  playerNo === 1
+    ? 'player1_objective'
+    : 'player2_objective'
+
+const roleField =
+  playerNo === 1
+    ? 'player1_role'
+    : 'player2_role'
 
       const { data, error } = await supabase
-        .from('games')
-        .select(field)
-        .eq('code', gameCode)
-        .single()
+  .from('games')
+  .select(`
+    ${objectiveField},
+    ${roleField}
+  `)
+  .eq('code', gameCode)
+  .single()
+
+  setObjective(data[objectiveField])
+setRole(data[roleField])
+setLoading(false)
 
       if (error) {
         console.error(error)
@@ -1438,7 +1577,12 @@ function SecretObjective({
           THE PACT / SECRET
         </p>
 
-        <h2>Votre objectif.</h2>
+        <h2>Votre mission.</h2>
+
+        <div className="result-box">
+  <span>Votre rôle</span>
+  <strong>{role}</strong>
+</div>
 
         <div className="secret-box">
           {objective}
@@ -1587,19 +1731,28 @@ function ActOneLive({
             THE PACT / ACTE I
           </p>
 
-          <h2>Résultat verrouillé.</h2>
+          <h2>Ne vous faites pas démasquer.</h2>
 
-          <div className="objective-confirmed">
-            {labels[result]}
-            <br />
-            Continuez normalement jusqu’à la résolution
-            de l’objectif adverse.
-          </div>
+<p className="intro">
+  Votre partenaire poursuit sa propre mission.
+  Vous ignorez ce qu’il cherche à provoquer.
+</p>
 
-          <div className="status">
-            <span className="status-dot"></span>
-            En attente de votre partenaire
-          </div>
+<div className="protocol-box">
+  <p className="protocol-number">
+    PROTOCOLE 01
+  </p>
+
+  <p>
+    Faites évoluer naturellement la situation
+    jusqu’à obtenir ce que votre mission exige.
+  </p>
+
+  <p>
+    Plus vous rendez votre intention évidente,
+    plus votre partenaire peut vous démasquer.
+  </p>
+</div>
         </section>
       </main>
     )
@@ -1637,34 +1790,34 @@ function ActOneLive({
 
         <div className="action-stack">
           <button
-            className="primary"
-            onClick={() =>
-              resolveObjective('success')
-            }
-            disabled={submitting}
-          >
-            Objectif atteint
-          </button>
+  className="primary"
+  onClick={() =>
+    resolveObjective('success')
+  }
+  disabled={submitting}
+>
+  Je l’ai obtenu
+</button>
 
-          <button
-            className="secondary"
-            onClick={() =>
-              resolveObjective('exposed')
-            }
-            disabled={submitting}
-          >
-            Objectif démasqué
-          </button>
+<button
+  className="secondary"
+  onClick={() =>
+    resolveObjective('exposed')
+  }
+  disabled={submitting}
+>
+  Mon jeu a été démasqué
+</button>
 
-          <button
-            className="tertiary-button"
-            onClick={() =>
-              resolveObjective('abandoned')
-            }
-            disabled={submitting}
-          >
-            J’abandonne cet objectif
-          </button>
+<button
+  className="tertiary-button"
+  onClick={() =>
+    resolveObjective('abandoned')
+  }
+  disabled={submitting}
+>
+  Passer cette mission
+</button>
         </div>
 
         {errorMessage && (
