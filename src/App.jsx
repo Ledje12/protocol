@@ -1304,15 +1304,18 @@ function ActOneReveal({
 function ActTwoIntro({
   gameCode,
   playerNo,
+  onEffect,
 }) {
   const [advantage, setAdvantage] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [choosing, setChoosing] = useState(false)
+  const [errorMessage, setErrorMessage] = useState('')
 
   useEffect(() => {
     async function loadActTwo() {
       const { data, error } = await supabase
         .from('games')
-        .select('act1_advantage')
+        .select('act1_advantage, act2_power, status')
         .eq('code', gameCode)
         .single()
 
@@ -1322,12 +1325,66 @@ function ActTwoIntro({
         return
       }
 
+      if (data.status === 'act2_effect') {
+        onEffect(data.act2_power)
+        return
+      }
+
       setAdvantage(data.act1_advantage)
       setLoading(false)
     }
 
     loadActTwo()
-  }, [gameCode])
+  }, [gameCode, onEffect])
+
+  useEffect(() => {
+    const channel = supabase
+      .channel(`act2-choice-${gameCode}-${playerNo}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'games',
+          filter: `code=eq.${gameCode}`,
+        },
+        (payload) => {
+          if (payload.new.status === 'act2_effect') {
+            onEffect(payload.new.act2_power)
+          }
+        }
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [gameCode, playerNo, onEffect])
+
+  async function choosePower(power) {
+    setChoosing(true)
+    setErrorMessage('')
+
+    const { data, error } = await supabase.rpc(
+      'choose_act2_power',
+      {
+        p_game_code: gameCode,
+        p_player_no: playerNo,
+        p_power: power,
+      }
+    )
+
+    if (error) {
+      console.error(error)
+      setErrorMessage(
+        'Impossible de sélectionner ce pouvoir.'
+      )
+      setChoosing(false)
+      return
+    }
+
+    onEffect(data.power)
+  }
 
   if (loading) {
     return (
@@ -1346,6 +1403,59 @@ function ActTwoIntro({
   const hasAdvantage =
     advantage === playerNo
 
+  if (advantage === null) {
+    return (
+      <main className="app">
+        <section className="card">
+          <p className="eyebrow">
+            THE PACT / ACTE II
+          </p>
+
+          <h2>L’Avantage.</h2>
+
+          <p className="intro">
+            Aucun joueur n’a obtenu d’avantage.
+            PROTOCOL va modifier les règles.
+          </p>
+
+          <div className="status">
+            <span className="status-dot"></span>
+            Égalité détectée
+          </div>
+        </section>
+      </main>
+    )
+  }
+
+  if (!hasAdvantage) {
+    return (
+      <main className="app">
+        <section className="card">
+          <p className="eyebrow">
+            THE PACT / ACTE II
+          </p>
+
+          <h2>L’Avantage.</h2>
+
+          <p className="intro">
+            Votre partenaire détient l’Avantage.
+          </p>
+
+          <div className="secret-box">
+            Une décision est en cours.
+            Vous n’en connaîtrez la nature
+            qu’au moment où elle prendra effet.
+          </div>
+
+          <div className="status">
+            <span className="status-dot"></span>
+            Décision secrète en cours
+          </div>
+        </section>
+      </main>
+    )
+  }
+
   return (
     <main className="app">
       <section className="card">
@@ -1353,37 +1463,123 @@ function ActTwoIntro({
           THE PACT / ACTE II
         </p>
 
-        <h2>L’Avantage.</h2>
+        <h2>Choisissez votre Avantage.</h2>
 
-        {advantage === null ? (
-          <p className="intro">
-            Aucun joueur n’a obtenu d’avantage.
-            PROTOCOL va modifier les règles.
+        <p className="intro">
+          Votre choix restera secret jusqu’à son activation.
+        </p>
+
+        <button
+          className="power-card"
+          onClick={() => choosePower('silence')}
+          disabled={choosing}
+        >
+          <span className="power-title">
+            Silence
+          </span>
+
+          <span className="power-description">
+            Pendant une courte période,
+            certaines communications deviennent interdites.
+          </span>
+        </button>
+
+        <button
+          className="power-card"
+          onClick={() => choosePower('permission')}
+          disabled={choosing}
+        >
+          <span className="power-title">
+            Permission
+          </span>
+
+          <span className="power-description">
+            Certaines actions nécessiteront
+            temporairement votre validation.
+          </span>
+        </button>
+
+        <button
+          className="power-card"
+          onClick={() => choosePower('blind_choice')}
+          disabled={choosing}
+        >
+          <span className="power-title">
+            Choix à l’aveugle
+          </span>
+
+          <span className="power-description">
+            Votre partenaire devra choisir
+            entre deux options sans connaître
+            leurs conséquences.
+          </span>
+        </button>
+
+        {errorMessage && (
+          <p className="error-message">
+            {errorMessage}
           </p>
-        ) : hasAdvantage ? (
-          <>
-            <p className="intro">
-              Vous détenez l’Avantage.
-            </p>
-
-            <div className="secret-box">
-              Vous allez pouvoir modifier
-              temporairement les règles du jeu.
-            </div>
-          </>
-        ) : (
-          <>
-            <p className="intro">
-              Votre partenaire détient l’Avantage.
-            </p>
-
-            <div className="secret-box">
-              Une décision va être prise sans
-              que vous en connaissiez immédiatement
-              la nature.
-            </div>
-          </>
         )}
+      </section>
+    </main>
+  )
+}
+
+function ActTwoEffect({
+  power,
+  playerNo,
+}) {
+  const content = {
+    silence: {
+      title: 'Silence',
+      text:
+        'Pendant les trois prochaines minutes, ' +
+        'vous ne pouvez pas poser de question directe.',
+    },
+
+    permission: {
+      title: 'Permission',
+      text:
+        'Pendant les trois prochaines minutes, ' +
+        'certaines décisions devront recevoir une validation explicite.',
+    },
+
+    blind_choice: {
+      title: 'Choix à l’aveugle',
+      text:
+        'Un choix vous sera bientôt proposé sans que toutes ses conséquences soient révélées.',
+    },
+  }
+
+  const selected =
+    content[power] ?? {
+      title: 'Règle inconnue',
+      text: 'PROTOCOL n’a pas pu identifier la règle.',
+    }
+
+  return (
+    <main className="app">
+      <section className="card">
+        <p className="eyebrow">
+          THE PACT / ACTE II
+        </p>
+
+        <h2>{selected.title}.</h2>
+
+        <div className="protocol-box">
+          <p className="protocol-number">
+            RÈGLE ACTIVE
+          </p>
+
+          <p>
+            {selected.text}
+          </p>
+        </div>
+
+        <div className="status">
+          <span className="status-dot"></span>
+          Règle active · Joueur {playerNo}
+        </div>
       </section>
     </main>
   )
@@ -1395,6 +1591,7 @@ function App() {
   const [joinedGame, setJoinedGame] = useState(null)
   const [playerNo, setPlayerNo] = useState(null)
   const [sharedProfile, setSharedProfile] = useState(null)
+  const [act2Power, setAct2Power] = useState(null)
 
   async function createGame() {
     const code = generateGameCode()
@@ -1557,6 +1754,19 @@ if (screen === 'act2-intro') {
   return (
     <ActTwoIntro
       gameCode={gameCode}
+      playerNo={playerNo}
+      onEffect={(power) => {
+        setAct2Power(power)
+        setScreen('act2-effect')
+      }}
+    />
+  )
+}
+
+if (screen === 'act2-effect') {
+  return (
+    <ActTwoEffect
+      power={act2Power}
       playerNo={playerNo}
     />
   )
