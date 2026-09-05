@@ -2017,13 +2017,130 @@ function ActTwoIntro({
   )
 }
 
+function ActiveEffect({
+  gameCode,
+  title,
+  rule,
+  action,
+  playerNo,
+  onComplete,
+}) {
+  const [finishing, setFinishing] = useState(false)
+  const [errorMessage, setErrorMessage] = useState('')
+
+  useEffect(() => {
+    const channel = supabase
+      .channel(`act2-complete-${gameCode}-${playerNo}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'games',
+          filter: `code=eq.${gameCode}`,
+        },
+        (payload) => {
+          if (payload.new.status === 'act2_complete') {
+            onComplete()
+          }
+        }
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [gameCode, playerNo, onComplete])
+
+  async function finishEffect() {
+    setFinishing(true)
+    setErrorMessage('')
+
+    const { error } = await supabase.rpc(
+      'finish_act2_effect',
+      {
+        p_game_code: gameCode,
+      }
+    )
+
+    if (error) {
+      console.error(error)
+      setErrorMessage(
+        'Impossible de terminer cet effet.'
+      )
+      setFinishing(false)
+      return
+    }
+
+    onComplete()
+  }
+
+  return (
+    <main className="app">
+      <section className="card">
+        <p className="eyebrow">
+          THE PACT / ACTE II
+        </p>
+
+        <h2>{title}</h2>
+
+        <div className="protocol-box">
+          <p className="protocol-number">
+            RÈGLE ACTIVE
+          </p>
+
+          <p>{rule}</p>
+        </div>
+
+        {action && (
+          <>
+            <div className="result-box">
+              <span>Action</span>
+              <strong>{action.title}</strong>
+            </div>
+
+            <div className="secret-box">
+              {action.text}
+            </div>
+
+            <p className="warning-text">
+              Cette action reste volontaire et peut être
+              interrompue ou passée à tout moment.
+            </p>
+          </>
+        )}
+
+        {errorMessage && (
+          <p className="error-message">
+            {errorMessage}
+          </p>
+        )}
+
+        <button
+          className="primary"
+          onClick={finishEffect}
+          disabled={finishing}
+        >
+          {finishing
+            ? 'Validation...'
+            : 'Effet terminé'}
+        </button>
+      </section>
+    </main>
+  )
+}
+
 function ActTwoEffect({
   gameCode,
   power,
   playerNo,
   onBlindReveal,
+  onComplete,
 }) {
   const [advantage, setAdvantage] = useState(null)
+  const [sharedProfile, setSharedProfile] = useState(null)
+  const [usedActionIds, setUsedActionIds] = useState([])
+  const [action, setAction] = useState(null)
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
@@ -2035,8 +2152,11 @@ function ActTwoEffect({
         .select(`
           act1_advantage,
           act2_power,
+          act2_action_id,
           act2_blind_choice,
           act2_blind_result,
+          shared_profile,
+          used_action_ids,
           status
         `)
         .eq('code', gameCode)
@@ -2051,9 +2171,12 @@ function ActTwoEffect({
         return
       }
 
-      if (
-        data.status === 'act2_blind_reveal'
-      ) {
+      if (data.status === 'act2_complete') {
+        onComplete()
+        return
+      }
+
+      if (data.status === 'act2_blind_reveal') {
         onBlindReveal(
           data.act2_blind_result
         )
@@ -2061,11 +2184,72 @@ function ActTwoEffect({
       }
 
       setAdvantage(data.act1_advantage)
+      setSharedProfile(data.shared_profile)
+      setUsedActionIds(data.used_action_ids ?? [])
+
+      if (data.act2_action_id) {
+        const existingAction =
+          ACTION_LIBRARY.find(
+            (item) =>
+              item.id === data.act2_action_id
+          )
+
+        setAction(existingAction ?? null)
+        setLoading(false)
+        return
+      }
+
+      if (
+        power === 'silence' ||
+        power === 'permission'
+      ) {
+        const group =
+          power === 'silence'
+            ? 'initiative'
+            : 'constraint'
+
+        const compatibleActions =
+          getCompatibleActions(
+            data.shared_profile,
+            group,
+            data.used_action_ids ?? []
+          )
+
+        const selected =
+          pickCompatibleAction(
+            compatibleActions,
+            gameCode,
+            group
+          )
+
+        if (selected) {
+          const { error: registerError } =
+            await supabase.rpc(
+              'register_action',
+              {
+                p_game_code: gameCode,
+                p_action_id: selected.id,
+              }
+            )
+
+          if (registerError) {
+            console.error(registerError)
+          }
+
+          setAction(selected)
+        }
+      }
+
       setLoading(false)
     }
 
     loadEffect()
-  }, [gameCode, onBlindReveal])
+  }, [
+    gameCode,
+    power,
+    onBlindReveal,
+    onComplete,
+  ])
 
   useEffect(() => {
     const channel = supabase
@@ -2089,6 +2273,13 @@ function ActTwoEffect({
               payload.new.act2_blind_result
             )
           }
+
+          if (
+            payload.new.status ===
+            'act2_complete'
+          ) {
+            onComplete()
+          }
         }
       )
       .subscribe()
@@ -2096,7 +2287,12 @@ function ActTwoEffect({
     return () => {
       supabase.removeChannel(channel)
     }
-  }, [gameCode, playerNo, onBlindReveal])
+  }, [
+    gameCode,
+    playerNo,
+    onBlindReveal,
+    onComplete,
+  ])
 
   async function chooseBlind(choice) {
     setSubmitting(true)
@@ -2185,35 +2381,21 @@ function ActTwoEffect({
 
           <button
             className="power-card"
-            onClick={() =>
-              chooseBlind('a')
-            }
+            onClick={() => chooseBlind('a')}
             disabled={submitting}
           >
             <span className="power-title">
               OPTION A
             </span>
-
-            <span className="power-description">
-              Vous acceptez cette option
-              sans en connaître l’effet.
-            </span>
           </button>
 
           <button
             className="power-card"
-            onClick={() =>
-              chooseBlind('b')
-            }
+            onClick={() => chooseBlind('b')}
             disabled={submitting}
           >
             <span className="power-title">
               OPTION B
-            </span>
-
-            <span className="power-description">
-              Vous acceptez cette option
-              sans en connaître l’effet.
             </span>
           </button>
 
@@ -2227,28 +2409,37 @@ function ActTwoEffect({
     )
   }
 
-  const content = {
-    silence: {
-      title: 'Silence',
-      text:
-        'Pendant les trois prochaines minutes, ' +
-        'vous ne pouvez pas poser de question directe.',
-    },
-
-    permission: {
-      title: 'Permission',
-      text:
-        'Pendant les trois prochaines minutes, ' +
-        'certaines décisions devront recevoir une validation explicite.',
-    },
+  if (power === 'silence') {
+    return (
+      <ActiveEffect
+        gameCode={gameCode}
+        playerNo={playerNo}
+        title="Silence."
+        rule={
+          'Pendant cette séquence, évitez les questions directes et les instructions verbales inutiles.'
+        }
+        action={action}
+        onComplete={onComplete}
+      />
+    )
   }
 
-  const selected =
-    content[power] ?? {
-      title: 'Règle inconnue',
-      text:
-        'PROTOCOL n’a pas pu identifier la règle.',
-    }
+  if (power === 'permission') {
+    return (
+      <ActiveEffect
+        gameCode={gameCode}
+        playerNo={playerNo}
+        title="Permission."
+        rule={
+          holder
+            ? 'Pendant cette séquence, votre partenaire vous laisse davantage d’initiative. Toute action reste volontaire et peut être refusée.'
+            : 'Pendant cette séquence, laissez davantage d’initiative à votre partenaire. Vous pouvez refuser ou interrompre à tout moment.'
+        }
+        action={action}
+        onComplete={onComplete}
+      />
+    )
+  }
 
   return (
     <main className="app">
@@ -2257,17 +2448,7 @@ function ActTwoEffect({
           THE PACT / ACTE II
         </p>
 
-        <h2>{selected.title}.</h2>
-
-        <div className="protocol-box">
-          <p className="protocol-number">
-            RÈGLE ACTIVE
-          </p>
-
-          <p>
-            {selected.text}
-          </p>
-        </div>
+        <h2>Effet inconnu.</h2>
       </section>
     </main>
   )
@@ -2276,9 +2457,11 @@ function ActTwoEffect({
 function ActTwoBlindReveal({
   gameCode,
   result,
+  onComplete,
 }) {
   const [action, setAction] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [finishing, setFinishing] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
 
   useEffect(() => {
@@ -2286,10 +2469,10 @@ function ActTwoBlindReveal({
       const { data, error } = await supabase
         .from('games')
         .select(`
-  shared_profile,
-  used_action_ids,
-  act2_action_id
-`)
+          shared_profile,
+          used_action_ids,
+          act2_action_id
+        `)
         .eq('code', gameCode)
         .single()
 
@@ -2302,66 +2485,116 @@ function ActTwoBlindReveal({
         return
       }
 
+      if (data.act2_action_id) {
+        const existingAction =
+          ACTION_LIBRARY.find(
+            (item) =>
+              item.id === data.act2_action_id
+          )
+
+        if (existingAction) {
+          setAction(existingAction)
+          setLoading(false)
+          return
+        }
+      }
+
       const group =
         result === 'initiative'
           ? 'initiative'
           : 'constraint'
 
-      if (data.act2_action_id) {
-  const existingAction =
-    ACTION_LIBRARY.find(
-      (action) =>
-        action.id === data.act2_action_id
-    )
+      const compatibleActions =
+        getCompatibleActions(
+          data.shared_profile,
+          group,
+          data.used_action_ids ?? []
+        )
 
-  if (existingAction) {
-    setAction(existingAction)
-    setLoading(false)
-    return
-  }
-}
+      const selected =
+        pickCompatibleAction(
+          compatibleActions,
+          gameCode,
+          group
+        )
 
-const compatibleActions =
-  getCompatibleActions(
-    data.shared_profile,
-    group,
-    data.used_action_ids ?? []
-  )
+      if (!selected) {
+        setLoading(false)
+        return
+      }
 
-const selected =
-  pickCompatibleAction(
-    compatibleActions,
-    gameCode,
-    group
-  )
+      const { error: registerError } =
+        await supabase.rpc(
+          'register_action',
+          {
+            p_game_code: gameCode,
+            p_action_id: selected.id,
+          }
+        )
 
-if (!selected) {
-  setLoading(false)
-  return
-}
+      if (registerError) {
+        console.error(registerError)
+        setErrorMessage(
+          'Impossible d’enregistrer cette action.'
+        )
+      }
 
-const { error: registerError } =
-  await supabase.rpc(
-    'register_action',
-    {
-      p_game_code: gameCode,
-      p_action_id: selected.id,
-    }
-  )
-
-if (registerError) {
-  console.error(registerError)
-  setErrorMessage(
-    'Impossible d’enregistrer cette action.'
-  )
-}
-
-setAction(selected)
-setLoading(false)
+      setAction(selected)
+      setLoading(false)
     }
 
     loadAction()
   }, [gameCode, result])
+
+  useEffect(() => {
+    const channel = supabase
+      .channel(`blind-complete-${gameCode}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'games',
+          filter: `code=eq.${gameCode}`,
+        },
+        (payload) => {
+          if (
+            payload.new.status ===
+            'act2_complete'
+          ) {
+            onComplete()
+          }
+        }
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [gameCode, onComplete])
+
+  async function finishEffect() {
+    setFinishing(true)
+    setErrorMessage('')
+
+    const { error } = await supabase.rpc(
+      'finish_act2_effect',
+      {
+        p_game_code: gameCode,
+      }
+    )
+
+    if (error) {
+      console.error(error)
+      setErrorMessage(
+        'Impossible de terminer cet effet.'
+      )
+      setFinishing(false)
+      return
+    }
+
+    onComplete()
+  }
 
   if (loading) {
     return (
@@ -2371,7 +2604,9 @@ setLoading(false)
             THE PACT / ACTE II
           </p>
 
-          <h2>Conséquence en préparation...</h2>
+          <h2>
+            Conséquence en préparation...
+          </h2>
         </section>
       </main>
     )
@@ -2388,8 +2623,8 @@ setLoading(false)
           <h2>Alternative.</h2>
 
           <p className="intro">
-            Aucune action compatible n’a été trouvée
-            pour cette conséquence.
+            Aucune action compatible n’a été
+            trouvée pour cette conséquence.
           </p>
 
           <div className="protocol-box">
@@ -2409,6 +2644,16 @@ setLoading(false)
               {errorMessage}
             </p>
           )}
+
+          <button
+            className="primary"
+            onClick={finishEffect}
+            disabled={finishing}
+          >
+            {finishing
+              ? 'Validation...'
+              : 'Effet terminé'}
+          </button>
         </section>
       </main>
     )
@@ -2424,17 +2669,17 @@ setLoading(false)
         <h2>Conséquence révélée.</h2>
 
         <div className="result-box">
-  <span>Cible</span>
+          <span>Cible</span>
 
-  <strong>
-    {action.target === 'holder'
-      ? 'Détenteur de l’Avantage'
-      : action.target === 'partner'
-        ? 'Partenaire'
-        : 'Les deux joueurs'}
-  </strong>
-</div>
-        
+          <strong>
+            {action.target === 'holder'
+              ? 'Détenteur de l’Avantage'
+              : action.target === 'partner'
+                ? 'Partenaire'
+                : 'Les deux joueurs'}
+          </strong>
+        </div>
+
         <div className="protocol-box">
           <p className="protocol-number">
             {action.title.toUpperCase()}
@@ -2458,6 +2703,46 @@ setLoading(false)
           votre profil commun. Elle peut toujours
           être interrompue ou passée.
         </p>
+
+        {errorMessage && (
+          <p className="error-message">
+            {errorMessage}
+          </p>
+        )}
+
+        <button
+          className="primary"
+          onClick={finishEffect}
+          disabled={finishing}
+        >
+          {finishing
+            ? 'Validation...'
+            : 'Effet terminé'}
+        </button>
+      </section>
+    </main>
+  )
+}
+
+function ActTwoComplete() {
+  return (
+    <main className="app">
+      <section className="card">
+        <p className="eyebrow">
+          THE PACT / ACTE II
+        </p>
+
+        <h2>L’effet est terminé.</h2>
+
+        <p className="intro">
+          PROTOCOL a enregistré la conséquence.
+          La dynamique de la partie a changé.
+        </p>
+
+        <div className="status">
+          <span className="status-dot"></span>
+          Acte II terminé
+        </div>
       </section>
     </main>
   )
@@ -2666,6 +2951,9 @@ if (screen === 'act2-effect') {
         setAct2BlindResult(result)
         setScreen('act2-blind-reveal')
       }}
+      onComplete={() =>
+        setScreen('act2-complete')
+      }
     />
   )
 }
@@ -2675,7 +2963,16 @@ if (screen === 'act2-blind-reveal') {
     <ActTwoBlindReveal
       gameCode={gameCode}
       result={act2BlindResult}
+      onComplete={() =>
+        setScreen('act2-complete')
+      }
     />
+  )
+}
+
+if (screen === 'act2-complete') {
+  return (
+    <ActTwoComplete />
   )
 }
 
