@@ -1165,13 +1165,7 @@ function ThePactIntro({
         >
           Recevoir mon instruction
         </button>
-
-        <button
-  className="secondary"
-  onClick={onDebug}
->
-  DEBUG ACTIONS
-</button>
+        
       </section>
     </main>
   )
