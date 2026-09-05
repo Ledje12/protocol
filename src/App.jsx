@@ -2720,10 +2720,68 @@ function ActTwoBlindReveal({
 
 function ActTwoComplete({
   gameCode,
+  playerNo,
   onActThree,
 }) {
   const [starting, setStarting] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
+
+  useEffect(() => {
+    async function checkStatus() {
+      const { data, error } = await supabase
+        .from('games')
+        .select('status')
+        .eq('code', gameCode)
+        .single()
+
+      if (error) {
+        console.error(error)
+        return
+      }
+
+      if (
+        data.status === 'act3_intro' ||
+        data.status === 'act3_lock' ||
+        data.status === 'act3_solved'
+      ) {
+        onActThree()
+      }
+    }
+
+    checkStatus()
+
+    const channel = supabase
+      .channel(
+        `act3-start-${gameCode}-${playerNo}`
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'games',
+          filter: `code=eq.${gameCode}`,
+        },
+        (payload) => {
+          if (
+            payload.new.status === 'act3_intro' ||
+            payload.new.status === 'act3_lock' ||
+            payload.new.status === 'act3_solved'
+          ) {
+            onActThree()
+          }
+        }
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [
+    gameCode,
+    playerNo,
+    onActThree,
+  ])
 
   async function startActThree() {
     setStarting(true)
@@ -2768,15 +2826,22 @@ function ActTwoComplete({
           </p>
         )}
 
-        <button
-          className="primary"
-          onClick={startActThree}
-          disabled={starting}
-        >
-          {starting
-            ? 'Initialisation...'
-            : 'Ouvrir le Verrou'}
-        </button>
+        {playerNo === 1 ? (
+          <button
+            className="primary"
+            onClick={startActThree}
+            disabled={starting}
+          >
+            {starting
+              ? 'Initialisation...'
+              : 'Ouvrir le Verrou'}
+          </button>
+        ) : (
+          <div className="status">
+            <span className="status-dot"></span>
+            En attente de l’ouverture du Verrou
+          </div>
+        )}
       </section>
     </main>
   )
@@ -3232,6 +3297,7 @@ if (screen === 'act2-complete') {
   return (
     <ActTwoComplete
       gameCode={gameCode}
+      playerNo={playerNo}
       onActThree={() =>
         setScreen('act3-intro')
       }
