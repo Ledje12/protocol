@@ -1,7 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import './App.css'
 import { supabase } from './supabase'
-import { useEffect, useRef, useState } from 'react'
 
 function generateGameCode() {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
@@ -752,80 +751,112 @@ function SecretObjective({
     setConfirming(true)
     setErrorMessage('')
 
-    create or replace function public.confirm_secret_objective(
-  p_game_code text,
-  p_player_no integer
-)
-returns jsonb
-language plpgsql
-security definer
-set search_path = public
-as $$
+    const { data, error } = await supabase.rpc(
+      'confirm_secret_objective',
+      {
+        p_game_code: gameCode,
+        p_player_no: playerNo,
+      }
+    )
 
-declare
-  v_game public.games%rowtype;
+    if (error) {
+      console.error(error)
+      setErrorMessage(
+        'Impossible de valider votre objectif.'
+      )
+      setConfirming(false)
+      return
+    }
 
-begin
+    if (data?.both_ready) {
+      onContinue()
+      return
+    }
 
-  if p_player_no not in (1, 2) then
-    raise exception 'Invalid player number';
-  end if;
+    setWaiting(true)
+    setConfirming(false)
+  }
 
-  if p_player_no = 1 then
+  if (loading) {
+    return (
+      <main className="app">
+        <section className="card">
+          <p className="eyebrow">
+            THE PACT
+          </p>
 
-    update public.games
-    set player1_ready = true
-    where code = upper(p_game_code);
+          <h2>Préparation...</h2>
 
-  else
+          {errorMessage && (
+            <p className="error-message">
+              {errorMessage}
+            </p>
+          )}
+        </section>
+      </main>
+    )
+  }
 
-    update public.games
-    set player2_ready = true
-    where code = upper(p_game_code);
+  if (waiting) {
+    return (
+      <main className="app">
+        <section className="card">
+          <p className="eyebrow">
+            THE PACT / SECRET
+          </p>
 
-  end if;
+          <h2>Objectif verrouillé.</h2>
 
+          <p className="intro">
+            Votre instruction est active.
+            Attendez que votre partenaire soit prêt.
+          </p>
 
-  select *
-  into v_game
-  from public.games
-  where code = upper(p_game_code)
-  limit 1;
+          <div className="status">
+            <span className="status-dot"></span>
+            Synchronisation en cours
+          </div>
+        </section>
+      </main>
+    )
+  }
 
+  return (
+    <main className="app">
+      <section className="card">
+        <p className="eyebrow">
+          THE PACT / SECRET
+        </p>
 
-  if v_game.id is null then
-    raise exception 'Game not found';
-  end if;
+        <h2>Votre objectif.</h2>
 
+        <div className="secret-box">
+          {objective}
+        </div>
 
-  if v_game.player1_ready and v_game.player2_ready then
+        <p className="intro">
+          Ne montrez pas cet écran à votre partenaire.
+        </p>
 
-    update public.games
-    set
-      status = 'act1_live',
-      act_started_at = now(),
-      player1_act1_done = false,
-      player2_act1_done = false,
-      act1_finished = false,
-      act1_advantage = null
-    where id = v_game.id;
+        {errorMessage && (
+          <p className="error-message">
+            {errorMessage}
+          </p>
+        )}
 
-    return jsonb_build_object(
-      'ready', true,
-      'both_ready', true
-    );
-
-  end if;
-
-
-  return jsonb_build_object(
-    'ready', true,
-    'both_ready', false
-  );
-
-end;
-
-$$;
+        <button
+          className="primary"
+          onClick={confirmObjective}
+          disabled={confirming}
+        >
+          {confirming
+            ? 'Validation...'
+            : 'J’ai compris'}
+        </button>
+      </section>
+    </main>
+  )
+}
 
 function ActOneLive({
   gameCode,
