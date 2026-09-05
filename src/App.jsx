@@ -1524,9 +1524,215 @@ function ActTwoIntro({
 }
 
 function ActTwoEffect({
+  gameCode,
   power,
   playerNo,
+  onBlindReveal,
 }) {
+  const [advantage, setAdvantage] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [submitting, setSubmitting] = useState(false)
+  const [errorMessage, setErrorMessage] = useState('')
+
+  useEffect(() => {
+    async function loadEffect() {
+      const { data, error } = await supabase
+        .from('games')
+        .select(`
+          act1_advantage,
+          act2_power,
+          act2_blind_choice,
+          act2_blind_result,
+          status
+        `)
+        .eq('code', gameCode)
+        .single()
+
+      if (error) {
+        console.error(error)
+        setErrorMessage(
+          'Impossible de charger l’effet.'
+        )
+        setLoading(false)
+        return
+      }
+
+      if (
+        data.status === 'act2_blind_reveal'
+      ) {
+        onBlindReveal(
+          data.act2_blind_result
+        )
+        return
+      }
+
+      setAdvantage(data.act1_advantage)
+      setLoading(false)
+    }
+
+    loadEffect()
+  }, [gameCode, onBlindReveal])
+
+  useEffect(() => {
+    const channel = supabase
+      .channel(
+        `act2-effect-${gameCode}-${playerNo}`
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'games',
+          filter: `code=eq.${gameCode}`,
+        },
+        (payload) => {
+          if (
+            payload.new.status ===
+            'act2_blind_reveal'
+          ) {
+            onBlindReveal(
+              payload.new.act2_blind_result
+            )
+          }
+        }
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [gameCode, playerNo, onBlindReveal])
+
+  async function chooseBlind(choice) {
+    setSubmitting(true)
+    setErrorMessage('')
+
+    const { data, error } = await supabase.rpc(
+      'submit_blind_choice',
+      {
+        p_game_code: gameCode,
+        p_player_no: playerNo,
+        p_choice: choice,
+      }
+    )
+
+    if (error) {
+      console.error(error)
+      setErrorMessage(
+        'Impossible d’enregistrer votre choix.'
+      )
+      setSubmitting(false)
+      return
+    }
+
+    onBlindReveal(data.result)
+  }
+
+  if (loading) {
+    return (
+      <main className="app">
+        <section className="card">
+          <p className="eyebrow">
+            THE PACT / ACTE II
+          </p>
+
+          <h2>Activation...</h2>
+        </section>
+      </main>
+    )
+  }
+
+  const holder =
+    advantage === playerNo
+
+  if (power === 'blind_choice') {
+    if (holder) {
+      return (
+        <main className="app">
+          <section className="card">
+            <p className="eyebrow">
+              THE PACT / ACTE II
+            </p>
+
+            <h2>Choix à l’aveugle.</h2>
+
+            <p className="intro">
+              Votre partenaire doit choisir
+              sans connaître les conséquences.
+            </p>
+
+            <div className="secret-box">
+              Vous connaissez les règles.
+              Votre partenaire ne les connaît pas encore.
+            </div>
+
+            <div className="status">
+              <span className="status-dot"></span>
+              En attente de son choix
+            </div>
+          </section>
+        </main>
+      )
+    }
+
+    return (
+      <main className="app">
+        <section className="card">
+          <p className="eyebrow">
+            THE PACT / ACTE II
+          </p>
+
+          <h2>Choisissez.</h2>
+
+          <p className="intro">
+            Deux options. Aucune explication.
+          </p>
+
+          <button
+            className="power-card"
+            onClick={() =>
+              chooseBlind('a')
+            }
+            disabled={submitting}
+          >
+            <span className="power-title">
+              OPTION A
+            </span>
+
+            <span className="power-description">
+              Vous acceptez cette option
+              sans en connaître l’effet.
+            </span>
+          </button>
+
+          <button
+            className="power-card"
+            onClick={() =>
+              chooseBlind('b')
+            }
+            disabled={submitting}
+          >
+            <span className="power-title">
+              OPTION B
+            </span>
+
+            <span className="power-description">
+              Vous acceptez cette option
+              sans en connaître l’effet.
+            </span>
+          </button>
+
+          {errorMessage && (
+            <p className="error-message">
+              {errorMessage}
+            </p>
+          )}
+        </section>
+      </main>
+    )
+  }
+
   const content = {
     silence: {
       title: 'Silence',
@@ -1541,18 +1747,13 @@ function ActTwoEffect({
         'Pendant les trois prochaines minutes, ' +
         'certaines décisions devront recevoir une validation explicite.',
     },
-
-    blind_choice: {
-      title: 'Choix à l’aveugle',
-      text:
-        'Un choix vous sera bientôt proposé sans que toutes ses conséquences soient révélées.',
-    },
   }
 
   const selected =
     content[power] ?? {
       title: 'Règle inconnue',
-      text: 'PROTOCOL n’a pas pu identifier la règle.',
+      text:
+        'PROTOCOL n’a pas pu identifier la règle.',
     }
 
   return (
@@ -1573,10 +1774,53 @@ function ActTwoEffect({
             {selected.text}
           </p>
         </div>
+      </section>
+    </main>
+  )
+}
 
-        <div className="status">
-          <span className="status-dot"></span>
-          Règle active · Joueur {playerNo}
+function ActTwoBlindReveal({
+  result,
+}) {
+  const content = {
+    initiative: {
+      title: 'Initiative',
+      text:
+        'Vous obtenez la prochaine initiative. ' +
+        'Proposez librement la prochaine action.',
+    },
+
+    constraint: {
+      title: 'Contrainte',
+      text:
+        'Votre prochaine décision devra respecter une règle imposée par PROTOCOL.',
+    },
+  }
+
+  const selected =
+    content[result] ?? {
+      title: 'Résultat inconnu',
+      text:
+        'PROTOCOL n’a pas pu identifier cette conséquence.',
+    }
+
+  return (
+    <main className="app">
+      <section className="card">
+        <p className="eyebrow">
+          THE PACT / ACTE II
+        </p>
+
+        <h2>Conséquence révélée.</h2>
+
+        <div className="protocol-box">
+          <p className="protocol-number">
+            {selected.title.toUpperCase()}
+          </p>
+
+          <p>
+            {selected.text}
+          </p>
         </div>
       </section>
     </main>
@@ -1590,6 +1834,7 @@ function App() {
   const [playerNo, setPlayerNo] = useState(null)
   const [sharedProfile, setSharedProfile] = useState(null)
   const [act2Power, setAct2Power] = useState(null)
+  const [act2BlindResult, setAct2BlindResult] = useState(null)
 
   async function createGame() {
     const code = generateGameCode()
@@ -1764,8 +2009,21 @@ if (screen === 'act2-intro') {
 if (screen === 'act2-effect') {
   return (
     <ActTwoEffect
+      gameCode={gameCode}
       power={act2Power}
       playerNo={playerNo}
+      onBlindReveal={(result) => {
+        setAct2BlindResult(result)
+        setScreen('act2-blind-reveal')
+      }}
+    />
+  )
+}
+
+if (screen === 'act2-blind-reveal') {
+  return (
+    <ActTwoBlindReveal
+      result={act2BlindResult}
     />
   )
 }
