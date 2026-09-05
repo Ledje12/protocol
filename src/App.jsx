@@ -1165,7 +1165,7 @@ function ThePactIntro({
         >
           Recevoir mon instruction
         </button>
-        
+
       </section>
     </main>
   )
@@ -2718,7 +2718,36 @@ function ActTwoBlindReveal({
   )
 }
 
-function ActTwoComplete() {
+function ActTwoComplete({
+  gameCode,
+  onActThree,
+}) {
+  const [starting, setStarting] = useState(false)
+  const [errorMessage, setErrorMessage] = useState('')
+
+  async function startActThree() {
+    setStarting(true)
+    setErrorMessage('')
+
+    const { error } = await supabase.rpc(
+      'start_act3',
+      {
+        p_game_code: gameCode,
+      }
+    )
+
+    if (error) {
+      console.error(error)
+      setErrorMessage(
+        'Impossible de lancer l’Acte III.'
+      )
+      setStarting(false)
+      return
+    }
+
+    onActThree()
+  }
+
   return (
     <main className="app">
       <section className="card">
@@ -2733,9 +2762,244 @@ function ActTwoComplete() {
           La dynamique de la partie a changé.
         </p>
 
-        <div className="status">
-          <span className="status-dot"></span>
-          Acte II terminé
+        {errorMessage && (
+          <p className="error-message">
+            {errorMessage}
+          </p>
+        )}
+
+        <button
+          className="primary"
+          onClick={startActThree}
+          disabled={starting}
+        >
+          {starting
+            ? 'Initialisation...'
+            : 'Ouvrir le Verrou'}
+        </button>
+      </section>
+    </main>
+  )
+}
+
+function ActThreeIntro({
+  gameCode,
+  playerNo,
+  onContinue,
+}) {
+  const [clue, setClue] = useState('')
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    async function loadClue() {
+      const field =
+        playerNo === 1
+          ? 'act3_player1_clue'
+          : 'act3_player2_clue'
+
+      const { data, error } = await supabase
+        .from('games')
+        .select(field)
+        .eq('code', gameCode)
+        .single()
+
+      if (error) {
+        console.error(error)
+        setLoading(false)
+        return
+      }
+
+      setClue(data[field])
+      setLoading(false)
+    }
+
+    loadClue()
+  }, [gameCode, playerNo])
+
+  if (loading) {
+    return (
+      <main className="app">
+        <section className="card">
+          <h2>Préparation...</h2>
+        </section>
+      </main>
+    )
+  }
+
+  return (
+    <main className="app">
+      <section className="card">
+        <p className="eyebrow">
+          THE PACT / ACTE III
+        </p>
+
+        <h2>Le Verrou.</h2>
+
+        <p className="intro">
+          Vous détenez une partie de la solution.
+          Votre partenaire possède l’autre.
+        </p>
+
+        <div className="secret-box">
+          {clue}
+        </div>
+
+        <p className="warning-text">
+          Vous pouvez communiquer votre indice,
+          mais pas montrer votre écran.
+        </p>
+
+        <button
+          className="primary"
+          onClick={onContinue}
+        >
+          J’ai mémorisé mon indice
+        </button>
+      </section>
+    </main>
+  )
+}
+
+function ActThreeLock({
+  gameCode,
+  onSolved,
+}) {
+  const [code, setCode] = useState('')
+  const [errorMessage, setErrorMessage] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+
+  useEffect(() => {
+    const channel = supabase
+      .channel(`act3-${gameCode}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'games',
+          filter: `code=eq.${gameCode}`,
+        },
+        (payload) => {
+          if (
+            payload.new.status ===
+            'act3_solved'
+          ) {
+            onSolved()
+          }
+        }
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [gameCode, onSolved])
+
+  async function submitCode() {
+    setSubmitting(true)
+    setErrorMessage('')
+
+    const { data, error } = await supabase.rpc(
+      'solve_act3',
+      {
+        p_game_code: gameCode,
+        p_code: code,
+      }
+    )
+
+    if (error) {
+      console.error(error)
+      setErrorMessage(
+        'Impossible de vérifier le code.'
+      )
+      setSubmitting(false)
+      return
+    }
+
+    if (!data?.solved) {
+      setErrorMessage(
+        'Code incorrect. Réessayez.'
+      )
+      setSubmitting(false)
+      return
+    }
+
+    onSolved()
+  }
+
+  return (
+    <main className="app">
+      <section className="card">
+        <p className="eyebrow">
+          THE PACT / ACTE III
+        </p>
+
+        <h2>Entrez le code.</h2>
+
+        <p className="intro">
+          Vous avez chacun une partie de la solution.
+        </p>
+
+        <input
+          className="code-input"
+          type="text"
+          inputMode="numeric"
+          maxLength="2"
+          value={code}
+          onChange={(event) =>
+            setCode(
+              event.target.value.replace(
+                /[^0-9]/g,
+                ''
+              )
+            )
+          }
+          placeholder="••"
+        />
+
+        {errorMessage && (
+          <p className="error-message">
+            {errorMessage}
+          </p>
+        )}
+
+        <button
+          className="primary"
+          onClick={submitCode}
+          disabled={
+            code.length !== 2 ||
+            submitting
+          }
+        >
+          {submitting
+            ? 'Vérification...'
+            : 'Déverrouiller'}
+        </button>
+      </section>
+    </main>
+  )
+}
+
+function ActThreeSolved() {
+  return (
+    <main className="app">
+      <section className="card">
+        <p className="eyebrow">
+          THE PACT / ACTE III
+        </p>
+
+        <h2>Verrou ouvert.</h2>
+
+        <div className="protocol-box">
+          <p className="protocol-number">
+            ACCÈS AUTORISÉ
+          </p>
+
+          <p>
+            Vous avez résolu le premier verrou.
+            PROTOCOL augmente maintenant
+            l’intensité.
+          </p>
         </div>
       </section>
     </main>
@@ -2966,7 +3230,41 @@ if (screen === 'act2-blind-reveal') {
 
 if (screen === 'act2-complete') {
   return (
-    <ActTwoComplete />
+    <ActTwoComplete
+      gameCode={gameCode}
+      onActThree={() =>
+        setScreen('act3-intro')
+      }
+    />
+  )
+}
+
+if (screen === 'act3-intro') {
+  return (
+    <ActThreeIntro
+      gameCode={gameCode}
+      playerNo={playerNo}
+      onContinue={() =>
+        setScreen('act3-lock')
+      }
+    />
+  )
+}
+
+if (screen === 'act3-lock') {
+  return (
+    <ActThreeLock
+      gameCode={gameCode}
+      onSolved={() =>
+        setScreen('act3-solved')
+      }
+    />
+  )
+}
+
+if (screen === 'act3-solved') {
+  return (
+    <ActThreeSolved />
   )
 }
 
