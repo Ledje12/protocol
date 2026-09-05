@@ -1310,12 +1310,18 @@ function ActTwoIntro({
   const [loading, setLoading] = useState(true)
   const [choosing, setChoosing] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
+  const [sharedProfile, setSharedProfile] = useState(null)
 
   useEffect(() => {
     async function loadActTwo() {
       const { data, error } = await supabase
         .from('games')
-        .select('act1_advantage, act2_power, status')
+        .select(`
+  act1_advantage,
+  act2_power,
+  status,
+  shared_profile
+`)
         .eq('code', gameCode)
         .single()
 
@@ -1331,6 +1337,7 @@ function ActTwoIntro({
       }
 
       setAdvantage(data.act1_advantage)
+      setSharedProfile(data.shared_profile)
       setLoading(false)
     }
 
@@ -1355,6 +1362,33 @@ function ActTwoIntro({
         }
       )
       .subscribe()
+
+      const availablePowers = [
+  {
+    key: 'silence',
+    title: 'Silence',
+    description:
+      'Pendant une courte période, certaines communications deviennent interdites.',
+    allowed: true,
+  },
+  {
+    key: 'permission',
+    title: 'Permission',
+    description:
+      'Certaines actions nécessiteront temporairement votre validation.',
+    allowed:
+      sharedProfile?.control >= 1 &&
+      sharedProfile?.surrender >= 1,
+  },
+  {
+    key: 'blind_choice',
+    title: 'Choix à l’aveugle',
+    description:
+      'Votre partenaire devra choisir entre deux options sans connaître leurs conséquences.',
+    allowed:
+      sharedProfile?.surprise >= 1,
+  },
+].filter((power) => power.allowed)
 
     return () => {
       supabase.removeChannel(channel)
@@ -1469,51 +1503,22 @@ function ActTwoIntro({
           Votre choix restera secret jusqu’à son activation.
         </p>
 
-        <button
-          className="power-card"
-          onClick={() => choosePower('silence')}
-          disabled={choosing}
-        >
-          <span className="power-title">
-            Silence
-          </span>
+        {availablePowers.map((power) => (
+  <button
+    key={power.key}
+    className="power-card"
+    onClick={() => choosePower(power.key)}
+    disabled={choosing}
+  >
+    <span className="power-title">
+      {power.title}
+    </span>
 
-          <span className="power-description">
-            Pendant une courte période,
-            certaines communications deviennent interdites.
-          </span>
-        </button>
-
-        <button
-          className="power-card"
-          onClick={() => choosePower('permission')}
-          disabled={choosing}
-        >
-          <span className="power-title">
-            Permission
-          </span>
-
-          <span className="power-description">
-            Certaines actions nécessiteront
-            temporairement votre validation.
-          </span>
-        </button>
-
-        <button
-          className="power-card"
-          onClick={() => choosePower('blind_choice')}
-          disabled={choosing}
-        >
-          <span className="power-title">
-            Choix à l’aveugle
-          </span>
-
-          <span className="power-description">
-            Votre partenaire devra choisir
-            entre deux options sans connaître
-            leurs conséquences.
-          </span>
-        </button>
+    <span className="power-description">
+      {power.description}
+    </span>
+  </button>
+))}
 
         {errorMessage && (
           <p className="error-message">
