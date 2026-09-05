@@ -315,6 +315,154 @@ function getCompatibleActions(
   )
 }
 
+function getActionDebugReport(profile, usedActionIds = []) {
+  return ACTION_LIBRARY.map((action) => {
+    const reasons = []
+
+    if (
+      action.intensity &&
+      action.intensity > (profile?.intensity ?? 0)
+    ) {
+      reasons.push(
+        `intensité ${action.intensity} > ${profile?.intensity ?? 0}`
+      )
+    }
+
+    for (const [dimension, minimum] of Object.entries(
+      action.requires ?? {}
+    )) {
+      const current = profile?.[dimension] ?? 0
+
+      if (current < minimum) {
+        reasons.push(
+          `${dimension} ${current} < ${minimum}`
+        )
+      }
+    }
+
+    if (usedActionIds.includes(action.id)) {
+      reasons.push('déjà utilisée')
+    }
+
+    return {
+      ...action,
+      allowed: reasons.length === 0,
+      reasons,
+    }
+  })
+}
+
+function ActionDebug({
+  gameCode,
+  onBack,
+}) {
+  const [rows, setRows] = useState([])
+  const [profile, setProfile] = useState(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    async function loadDebug() {
+      const { data, error } = await supabase
+        .from('games')
+        .select(`
+          shared_profile,
+          used_action_ids
+        `)
+        .eq('code', gameCode)
+        .single()
+
+      if (error) {
+        console.error(error)
+        setLoading(false)
+        return
+      }
+
+      setProfile(data.shared_profile)
+
+      setRows(
+        getActionDebugReport(
+          data.shared_profile,
+          data.used_action_ids ?? []
+        )
+      )
+
+      setLoading(false)
+    }
+
+    loadDebug()
+  }, [gameCode])
+
+  if (loading) {
+    return (
+      <main className="app">
+        <section className="card">
+          <h2>Chargement debug...</h2>
+        </section>
+      </main>
+    )
+  }
+
+  return (
+    <main className="app">
+      <section className="card calibration-card">
+        <p className="eyebrow">
+          PROTOCOL / DEBUG
+        </p>
+
+        <h2>Actions compatibles.</h2>
+
+        <pre
+          style={{
+            whiteSpace: 'pre-wrap',
+            fontSize: '12px',
+            opacity: 0.8,
+          }}
+        >
+          {JSON.stringify(profile, null, 2)}
+        </pre>
+
+        {rows.map((action) => (
+          <div
+            key={action.id}
+            className="reveal-player"
+          >
+            <p className="protocol-number">
+              {action.allowed
+                ? 'AUTORISÉE'
+                : 'BLOQUÉE'}
+            </p>
+
+            <strong>
+              {action.title}
+            </strong>
+
+            <p>
+              {action.category}
+              {' · '}
+              intensité {action.intensity}
+              {' · '}
+              cible {action.target}
+            </p>
+
+            {!action.allowed && (
+              <p className="warning-text">
+                {action.reasons.join(' · ')}
+              </p>
+            )}
+          </div>
+        ))}
+
+        <button
+          className="secondary"
+          onClick={onBack}
+        >
+          Retour
+        </button>
+      </section>
+    </main>
+  )
+}
+
 function hashString(value) {
   let hash = 0
 
@@ -931,6 +1079,7 @@ function JoinedGame({
 function CalibrationReady({
   sharedProfile,
   onStart,
+  onDebug,
 }) {
   return (
     <main className="app">
@@ -1009,6 +1158,13 @@ function ThePactIntro({
         >
           Recevoir mon instruction
         </button>
+
+        <button
+  className="secondary"
+  onClick={onDebug}
+>
+  DEBUG ACTIONS
+</button>
       </section>
     </main>
   )
@@ -2410,13 +2566,27 @@ function App() {
   }
 
   if (screen === 'calibration-ready') {
-    return (
-      <CalibrationReady
-        sharedProfile={sharedProfile}
-        onStart={startThePact}
-      />
-    )
-  }
+  return (
+    <CalibrationReady
+      sharedProfile={sharedProfile}
+      onStart={startThePact}
+      onDebug={() =>
+        setScreen('action-debug')
+      }
+    />
+  )
+}
+
+  if (screen === 'action-debug') {
+  return (
+    <ActionDebug
+      gameCode={gameCode}
+      onBack={() =>
+        setScreen('calibration-ready')
+      }
+    />
+  )
+}
 
   if (screen === 'the-pact-intro') {
     return (
