@@ -1925,32 +1925,66 @@ function ThePactIntro({
           THE PACT / ACTE I
         </p>
 
-        <h2>Le Pacte commence.</h2>
+        <p className="protocol-number">
+          LE SIGNAL
+        </p>
+
+        <h2>
+          Influencez sans être lu.
+        </h2>
 
         <p className="intro">
-          Pendant cette partie, vous ne recevrez pas toujours
-          les mêmes informations.
+          La calibration a indiqué à PROTOCOL
+          ce que vous êtes prêts à explorer.
         </p>
 
         <p className="intro">
-          Certaines règles, intentions et objectifs resteront
-          volontairement secrets.
+          Elle ne lui dit rien sur la manière
+          dont vous vous influencez réellement.
         </p>
+
+        <div className="protocol-box">
+          <p className="protocol-number">
+            PROTOCOLE 01
+          </p>
+
+          <p>
+            Deux intentions différentes vont
+            maintenant être implantées.
+          </p>
+
+          <p>
+            Votre partenaire ignore ce que
+            vous cherchez à obtenir de lui.
+            Vous ignorez ce qu’il cherche
+            à obtenir de vous.
+          </p>
+
+          <p>
+            PROTOCOL observera uniquement
+            le résultat.
+          </p>
+        </div>
 
         <div className="result-box">
-          <span>Votre rôle</span>
+          <span>Canal privé</span>
+
           <strong>
-            Joueur {playerNo}
+            JOUEUR {playerNo}
           </strong>
         </div>
+
+        <p className="warning-text">
+          Ne montrez plus votre écran
+          à votre partenaire.
+        </p>
 
         <button
           className="primary"
           onClick={onContinue}
         >
-          Recevoir mon instruction
+          Recevoir mon Signal
         </button>
-
       </section>
     </main>
   )
@@ -1967,6 +2001,7 @@ function SecretObjective({
   const [confirming, setConfirming] = useState(false)
   const [waiting, setWaiting] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
+  const [successRule, setSuccessRule] = useState('')
 
   useEffect(() => {
     async function loadObjective() {
@@ -1980,15 +2015,21 @@ function SecretObjective({
           ? 'player1_role'
           : 'player2_role'
 
+      const successField =
+  playerNo === 1
+    ? 'player1_success_rule'
+    : 'player2_success_rule'
+
       const { data, error } = await supabase
-        .from('games')
-        .select(`
-          ${objectiveField},
-          ${roleField},
-          status
-        `)
-        .eq('code', gameCode)
-        .single()
+  .from('games')
+  .select(`
+    ${objectiveField},
+    ${roleField},
+    ${successField},
+    status
+  `)
+  .eq('code', gameCode)
+  .single()
 
       if (error || !data) {
         console.error(error)
@@ -2012,6 +2053,9 @@ function SecretObjective({
 
       setObjective(data[objectiveField] ?? '')
       setRole(data[roleField] ?? '')
+      setSuccessRule(
+  data[successField] ?? ''
+)
       setLoading(false)
     }
 
@@ -2164,6 +2208,16 @@ function SecretObjective({
           {objective}
         </div>
 
+        <div className="protocol-box">
+  <p className="protocol-number">
+    CONDITION DE VALIDATION
+  </p>
+
+  <p>
+    {successRule}
+  </p>
+</div>
+
         <p className="intro">
           Ne montrez pas cet écran à votre partenaire.
         </p>
@@ -2198,6 +2252,7 @@ function ActOneLive({
   const [objective, setObjective] = useState('')
   const [missionVisible, setMissionVisible] = useState(false)
   const [partnerResolved, setPartnerResolved] = useState(false)
+  const [successRule, setSuccessRule] = useState('')
 
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
@@ -2218,6 +2273,8 @@ function ActOneLive({
           player2_role,
           player1_objective,
           player2_objective,
+          player1_success_rule,
+player2_success_rule,
           player1_act1_result,
           player2_act1_result,
           status
@@ -2258,6 +2315,10 @@ function ActOneLive({
         playerNo === 1
           ? data.player1_objective
           : data.player2_objective
+
+      setSuccessRule(
+  ownSuccessRule ?? ''
+)
 
       setResult(ownResult ?? 'pending')
       setRole(ownRole ?? '')
@@ -2462,30 +2523,40 @@ function ActOneLive({
         </div>
 
         {!missionVisible ? (
-          <button
-            className="secondary"
-            onClick={() =>
-              setMissionVisible(true)
-            }
-          >
-            Revoir ma mission
-          </button>
-        ) : (
-          <>
-            <div className="secret-box">
-              {objective}
-            </div>
+  <button
+    className="secondary"
+    onClick={() =>
+      setMissionVisible(true)
+    }
+  >
+    Revoir ma mission
+  </button>
+) : (
+  <>
+    <div className="secret-box">
+      {objective}
+    </div>
 
-            <button
-              className="secondary"
-              onClick={() =>
-                setMissionVisible(false)
-              }
-            >
-              Masquer ma mission
-            </button>
-          </>
-        )}
+    <div className="protocol-box">
+      <p className="protocol-number">
+        RÉUSSITE SI
+      </p>
+
+      <p>
+        {successRule}
+      </p>
+    </div>
+
+    <button
+      className="secondary"
+      onClick={() =>
+        setMissionVisible(false)
+      }
+    >
+      Masquer ma mission
+    </button>
+  </>
+)}
 
         {partnerResolved && (
           <div className="status">
@@ -2701,6 +2772,50 @@ function ActOneReveal({
     )
   }
 
+  let observationTitle =
+  'Aucune influence dominante.'
+
+let observationText =
+  'Vos deux tentatives ont produit un résultat similaire. PROTOCOL ne peut pas encore isoler une influence dominante.'
+
+if (game.act1_advantage === 1) {
+  observationTitle =
+    'Influence dominante : Joueur 1.'
+
+  observationText =
+    'Le Joueur 1 a obtenu davantage de contrôle sur le déroulement du Signal. Cette asymétrie sera conservée pour la suite.'
+}
+
+if (game.act1_advantage === 2) {
+  observationTitle =
+    'Influence dominante : Joueur 2.'
+
+  observationText =
+    'Le Joueur 2 a obtenu davantage de contrôle sur le déroulement du Signal. Cette asymétrie sera conservée pour la suite.'
+}
+
+if (
+  game.player1_act1_result === 'success' &&
+  game.player2_act1_result === 'success'
+) {
+  observationTitle =
+    'Influence réciproque.'
+
+  observationText =
+    'Vous avez tous les deux réussi à modifier le comportement de l’autre sans interrompre le jeu. PROTOCOL détecte une influence mutuelle.'
+}
+
+if (
+  game.player1_act1_result === 'exposed' &&
+  game.player2_act1_result === 'exposed'
+) {
+  observationTitle =
+    'Lecture mutuelle.'
+
+  observationText =
+    'Vous avez tous les deux détecté ce qui se jouait. Vous êtes peut-être plus prévisibles l’un pour l’autre que PROTOCOL ne l’avait prévu.'
+}
+
   return (
     <main className="app">
       <section className="card">
@@ -2755,21 +2870,28 @@ function ActOneReveal({
         </div>
 
         <div className="protocol-box">
-          <p className="protocol-number">
-            ANALYSE 01
-          </p>
+  <p className="protocol-number">
+    ANALYSE 01
+  </p>
 
-          <p>
-            PROTOCOL sait maintenant
-            ce que vous avez tenté d’obtenir
-            l’un de l’autre.
-          </p>
+  <strong>
+    {observationTitle}
+  </strong>
 
-          <p>
-            Il lui manque encore ce que
-            vous n’avez pas essayé de montrer.
-          </p>
-        </div>
+  <p>
+    {observationText}
+  </p>
+</div>
+
+<p className="intro">
+  Mais un comportement observé ne suffit pas.
+</p>
+
+<p className="intro">
+  PROTOCOL veut maintenant comparer
+  ce que vous avez essayé d’obtenir
+  à ce que vous désirez réellement.
+</p>
 
         {errorMessage && (
           <p className="error-message">
@@ -2785,7 +2907,7 @@ function ActOneReveal({
           >
             {starting
               ? 'Initialisation...'
-              : 'Continuer'}
+              : 'Ouvrir l’Interrogatoire'}
           </button>
         ) : (
           <div className="status">
