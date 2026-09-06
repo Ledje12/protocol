@@ -473,3 +473,28 @@ h2 {
   opacity: 0.4;
   cursor: not-allowed;
 }
+
+.answer-input {
+  width: 100%;
+  min-height: 120px;
+  box-sizing: border-box;
+  resize: vertical;
+
+  margin: 18px 0;
+
+  padding: 16px;
+
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 12px;
+
+  background: rgba(255, 255, 255, 0.035);
+  color: inherit;
+
+  font: inherit;
+  line-height: 1.5;
+}
+
+.answer-input:focus {
+  outline: none;
+  border-color: rgba(255, 255, 255, 0.42);
+}

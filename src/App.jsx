@@ -761,6 +761,80 @@ const ACTION_LIBRARY = [
 
 ]
 
+const QUESTION_LIBRARY = {
+  desire_more_often: {
+    level: 2,
+    title: 'Ce qui manque.',
+    text:
+      'Quelle chose aimeriez-vous que votre partenaire prenne plus souvent l’initiative de faire avec vous ?',
+    placeholder:
+      'Écrivez une réponse courte et précise...',
+  },
+
+  attention_body: {
+    level: 2,
+    title: 'Votre regard.',
+    text:
+      'Quelle partie du corps de votre partenaire attire votre attention plus souvent qu’il ne le pense ?',
+    placeholder:
+      'Une partie du corps...',
+  },
+
+  initiative_missing: {
+    level: 2,
+    title: 'Sans demander.',
+    text:
+      'Quelle chose aimeriez-vous que votre partenaire fasse parfois spontanément, sans attendre que vous la demandiez ?',
+    placeholder:
+      'Ce que vous aimeriez qu’il initie...',
+  },
+
+  want_more: {
+    level: 3,
+    title: 'Plus souvent.',
+    text:
+      'Parmi ce qui se passe déjà entre vous, qu’aimeriez-vous vivre plus souvent ou plus longtemps ?',
+    placeholder:
+      'Une chose que vous voudriez amplifier...',
+  },
+
+  surprise_me: {
+    level: 3,
+    title: 'Surprenez-moi.',
+    text:
+      'Dans quelle situation aimeriez-vous parfois que votre partenaire décide à votre place de la suite, tout en restant dans vos limites ?',
+    placeholder:
+      'Décrivez une situation...',
+  },
+
+  unspoken_request: {
+    level: 4,
+    title: 'La demande retenue.',
+    text:
+      'Quelle demande intime avez-vous déjà eu envie de formuler à votre partenaire sans vraiment aller jusqu’au bout ?',
+    placeholder:
+      'Une demande que vous avez retenue...',
+  },
+
+  control_fantasy: {
+    level: 4,
+    title: 'Le contrôle.',
+    text:
+      'Si vous deviez choisir pour ce soir, qu’est-ce qui vous attirerait le plus : diriger davantage, lâcher davantage prise, ou alterner les deux ? Pourquoi ?',
+    placeholder:
+      'Diriger, lâcher prise, alterner...',
+  },
+
+  comfort_edge: {
+    level: 4,
+    title: 'Juste au bord.',
+    text:
+      'Quelle expérience pourrait vous faire légèrement sortir de votre zone de confort tout en restant excitante plutôt qu’inconfortable ?',
+    placeholder:
+      'Quelque chose d’un peu audacieux...',
+  },
+}
+
 function isActionAllowed(action, profile) {
   if (!profile) {
     return false
@@ -2348,7 +2422,7 @@ function ActOneLive({
 function ActOneReveal({
   gameCode,
   playerNo,
-  onActTwo,
+  onInterrogation,
 }) {
   const [game, setGame] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -2386,10 +2460,14 @@ function ActOneReveal({
         return
       }
 
-      if (data.status === 'act2_choice') {
-        onActTwo()
-        return
-      }
+      if (
+  data.status === 'interrogation' ||
+  data.status === 'interrogation_reveal' ||
+  data.status === 'interrogation_complete'
+) {
+  onInterrogation()
+  return
+}
 
       setGame(data)
       setLoading(false)
@@ -2410,8 +2488,12 @@ function ActOneReveal({
           filter: `code=eq.${gameCode}`,
         },
         (payload) => {
-          if (payload.new.status === 'act2_choice') {
-            onActTwo()
+          if (
+  data.status === 'interrogation' ||
+  data.status === 'interrogation_reveal' ||
+  data.status === 'interrogation_complete'
+) {
+            onInterrogation()
           }
         }
       )
@@ -2422,28 +2504,30 @@ function ActOneReveal({
     }
   }, [gameCode, playerNo, onActTwo])
 
-  async function startActTwo() {
-    setStarting(true)
-    setErrorMessage('')
+  async function startInterrogation() {
+  setStarting(true)
+  setErrorMessage('')
 
-    const { error } = await supabase.rpc(
-      'start_act2',
-      {
-        p_game_code: gameCode,
-      }
+  const { error } = await supabase.rpc(
+    'start_interrogation',
+    {
+      p_game_code: gameCode,
+    }
+  )
+
+  if (error) {
+    console.error(error)
+
+    setErrorMessage(
+      'Impossible de lancer l’interrogatoire.'
     )
 
-    if (error) {
-      console.error(error)
-      setErrorMessage(
-        'Impossible de lancer l’Acte II.'
-      )
-      setStarting(false)
-      return
-    }
-
-    onActTwo()
+    setStarting(false)
+    return
   }
+
+  onInterrogation()
+}
 
   if (loading) {
     return (
@@ -2539,19 +2623,504 @@ function ActOneReveal({
         {playerNo === 1 ? (
           <button
             className="primary"
-            onClick={startActTwo}
+            onClick={startInterrogation}
             disabled={starting}
           >
             {starting
               ? 'Initialisation...'
-              : 'Continuer vers l’Acte II'}
+              : 'Continuer'}
           </button>
         ) : (
           <div className="status">
             <span className="status-dot"></span>
-            En attente du lancement de l’Acte II
+            En attente de la prochaine phase
           </div>
         )}
+      </section>
+    </main>
+  )
+}
+
+function Interrogation({
+  gameCode,
+  playerNo,
+  onActTwo,
+}) {
+  const [state, setState] = useState(null)
+  const [answer, setAnswer] = useState('')
+  const [loading, setLoading] = useState(true)
+  const [submitting, setSubmitting] = useState(false)
+  const [advancing, setAdvancing] = useState(false)
+  const [errorMessage, setErrorMessage] = useState('')
+
+  async function loadState() {
+    const { data, error } = await supabase.rpc(
+      'get_interrogation_state',
+      {
+        p_game_code: gameCode,
+        p_player_no: playerNo,
+      }
+    )
+
+    if (error) {
+      console.error(error)
+
+      setErrorMessage(
+        'Impossible de charger l’interrogatoire.'
+      )
+
+      setLoading(false)
+      return
+    }
+
+    setState(data)
+
+    if (data?.own_answer) {
+      setAnswer(data.own_answer)
+    } else {
+      setAnswer('')
+    }
+
+    setLoading(false)
+  }
+
+  useEffect(() => {
+    loadState()
+
+    const channel = supabase
+      .channel(
+        `interrogation-${gameCode}-${playerNo}`
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'games',
+          filter: `code=eq.${gameCode}`,
+        },
+        async (payload) => {
+          if (
+            payload.new.status ===
+              'interrogation' ||
+            payload.new.status ===
+              'interrogation_reveal'
+          ) {
+            await loadState()
+          }
+
+          if (
+            payload.new.status ===
+            'interrogation_complete'
+          ) {
+            await loadState()
+          }
+
+          if (
+  payload.new.status === 'interrogation' ||
+  payload.new.status === 'interrogation_reveal' ||
+  payload.new.status === 'interrogation_complete'
+) {
+  onInterrogation()
+}
+        }
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [
+    gameCode,
+    playerNo,
+    onActTwo,
+  ])
+
+  async function submitAnswer() {
+    if (!answer.trim()) {
+      return
+    }
+
+    setSubmitting(true)
+    setErrorMessage('')
+
+    const { error } = await supabase.rpc(
+      'submit_interrogation_answer',
+      {
+        p_game_code: gameCode,
+        p_player_no: playerNo,
+        p_answer: answer.trim(),
+      }
+    )
+
+    if (error) {
+      console.error(error)
+
+      setErrorMessage(
+        'Impossible d’enregistrer votre réponse.'
+      )
+
+      setSubmitting(false)
+      return
+    }
+
+    setSubmitting(false)
+
+    await loadState()
+  }
+
+  async function advance() {
+    setAdvancing(true)
+    setErrorMessage('')
+
+    const { data, error } = await supabase.rpc(
+      'advance_interrogation',
+      {
+        p_game_code: gameCode,
+      }
+    )
+
+    if (error) {
+      console.error(error)
+
+      setErrorMessage(
+        'Impossible de poursuivre l’interrogatoire.'
+      )
+
+      setAdvancing(false)
+      return
+    }
+
+    if (data?.complete) {
+      setState((current) => ({
+        ...current,
+        status: 'interrogation_complete',
+      }))
+
+      setAdvancing(false)
+      return
+    }
+
+    setAnswer('')
+    setAdvancing(false)
+
+    await loadState()
+  }
+
+  async function startActTwo() {
+    setAdvancing(true)
+    setErrorMessage('')
+
+    const { error } = await supabase.rpc(
+      'start_act2',
+      {
+        p_game_code: gameCode,
+      }
+    )
+
+    if (error) {
+      console.error(error)
+
+      setErrorMessage(
+        'Impossible d’ouvrir l’Acte II.'
+      )
+
+      setAdvancing(false)
+      return
+    }
+
+    onActTwo()
+  }
+
+  if (loading || !state) {
+    return (
+      <main className="app">
+        <section className="card">
+          <p className="eyebrow">
+            THE PACT / INTERROGATOIRE
+          </p>
+
+          <h2>Analyse en cours...</h2>
+        </section>
+      </main>
+    )
+  }
+
+  if (
+    state.status ===
+    'interrogation_complete'
+  ) {
+    return (
+      <main className="app">
+        <section className="card">
+          <p className="eyebrow">
+            THE PACT / INTERROGATOIRE
+          </p>
+
+          <h2>
+            Données suffisantes.
+          </h2>
+
+          <div className="protocol-box">
+            <p className="protocol-number">
+              PROFIL DE SESSION
+            </p>
+
+            <p>
+              Vous venez de fournir à PROTOCOL
+              des informations que votre
+              calibration ne pouvait pas mesurer.
+            </p>
+
+            <p>
+              Vos intentions ne sont plus
+              seulement théoriques.
+              Elles font désormais partie
+              de cette session.
+            </p>
+          </div>
+
+          <p className="intro">
+            Une influence a été détectée pendant
+            le Signal. PROTOCOL va maintenant
+            lui donner du poids.
+          </p>
+
+          {errorMessage && (
+            <p className="error-message">
+              {errorMessage}
+            </p>
+          )}
+
+          {playerNo === 1 ? (
+            <button
+              className="primary"
+              onClick={startActTwo}
+              disabled={advancing}
+            >
+              {advancing
+                ? 'Activation...'
+                : 'Ouvrir L’ASCENDANT'}
+            </button>
+          ) : (
+            <div className="status">
+              <span className="status-dot"></span>
+              En attente de l’activation
+            </div>
+          )}
+        </section>
+      </main>
+    )
+  }
+
+  const question =
+    QUESTION_LIBRARY[
+      state.question_id
+    ]
+
+  if (!question) {
+    return (
+      <main className="app">
+        <section className="card">
+          <p className="eyebrow">
+            THE PACT / INTERROGATOIRE
+          </p>
+
+          <h2>
+            Question introuvable.
+          </h2>
+        </section>
+      </main>
+    )
+  }
+
+  /*
+   * RÉVÉLATION
+   */
+  if (
+    state.status ===
+    'interrogation_reveal'
+  ) {
+    return (
+      <main className="app">
+        <section className="card">
+          <p className="eyebrow">
+            THE PACT / INTERROGATOIRE
+          </p>
+
+          <p className="protocol-number">
+            RÉVÉLATION {state.round} / 2
+          </p>
+
+          <h2>{question.title}</h2>
+
+          <p className="intro">
+            {question.text}
+          </p>
+
+          <div className="reveal-player">
+            <p className="protocol-number">
+              JOUEUR 1
+            </p>
+
+            <p>
+              {state.player1_answer}
+            </p>
+          </div>
+
+          <div className="reveal-player">
+            <p className="protocol-number">
+              JOUEUR 2
+            </p>
+
+            <p>
+              {state.player2_answer}
+            </p>
+          </div>
+
+          <div className="protocol-box">
+            <p className="protocol-number">
+              OBSERVATION
+            </p>
+
+            <p>
+              PROTOCOL ne cherche pas une bonne
+              réponse. Il cherche ce qui se
+              produit lorsque vos réponses
+              cessent d’être privées.
+            </p>
+          </div>
+
+          {errorMessage && (
+            <p className="error-message">
+              {errorMessage}
+            </p>
+          )}
+
+          {playerNo === 1 ? (
+            <button
+              className="primary"
+              onClick={advance}
+              disabled={advancing}
+            >
+              {advancing
+                ? 'Analyse...'
+                : state.round === 1
+                  ? 'Interrogatoire suivant'
+                  : 'Terminer l’analyse'}
+            </button>
+          ) : (
+            <div className="status">
+              <span className="status-dot"></span>
+              PROTOCOL attend la suite
+            </div>
+          )}
+        </section>
+      </main>
+    )
+  }
+
+  /*
+   * JOUEUR AYANT DÉJÀ RÉPONDU
+   */
+  if (state.submitted) {
+    return (
+      <main className="app">
+        <section className="card">
+          <p className="eyebrow">
+            THE PACT / INTERROGATOIRE
+          </p>
+
+          <p className="protocol-number">
+            QUESTION {state.round} / 2
+          </p>
+
+          <h2>Réponse verrouillée.</h2>
+
+          <div className="secret-box">
+            {answer}
+          </div>
+
+          <p className="intro">
+            Votre partenaire n’a pas encore
+            accès à cette réponse.
+          </p>
+
+          <div className="status">
+            <span className="status-dot"></span>
+            En attente de sa réponse
+          </div>
+        </section>
+      </main>
+    )
+  }
+
+  /*
+   * QUESTION
+   */
+  return (
+    <main className="app">
+      <section className="card">
+        <p className="eyebrow">
+          THE PACT / INTERROGATOIRE
+        </p>
+
+        <p className="protocol-number">
+          QUESTION {state.round} / 2
+        </p>
+
+        <h2>{question.title}</h2>
+
+        <p className="intro">
+          Répondez sans consulter votre partenaire.
+          Vos réponses seront révélées uniquement
+          lorsque vous aurez répondu tous les deux.
+        </p>
+
+        <div className="protocol-box">
+          <p>
+            {question.text}
+          </p>
+        </div>
+
+        <textarea
+          className="answer-input"
+          rows="5"
+          maxLength="500"
+          value={answer}
+          placeholder={
+            question.placeholder
+          }
+          onChange={(event) =>
+            setAnswer(
+              event.target.value
+            )
+          }
+        />
+
+        <p className="warning-text">
+          Cette réponse concerne uniquement
+          la partie de ce soir.
+        </p>
+
+        {errorMessage && (
+          <p className="error-message">
+            {errorMessage}
+          </p>
+        )}
+
+        <button
+          className="primary"
+          onClick={submitAnswer}
+          disabled={
+            !answer.trim() ||
+            submitting
+          }
+        >
+          {submitting
+            ? 'Verrouillage...'
+            : 'Verrouiller ma réponse'}
+        </button>
       </section>
     </main>
   )
@@ -4228,6 +4797,16 @@ const [rerolling, setRerolling] = useState(false)
             </p>
 
             <button
+  className="secondary"
+  onClick={rerollAction}
+  disabled={rerolling || skipping}
+>
+  {rerolling
+    ? 'Recherche...'
+    : 'Autre proposition'}
+</button>
+            
+            <button
               className="tertiary-button"
               onClick={skipAction}
               disabled={skipping}
@@ -4617,6 +5196,18 @@ function App() {
 if (screen === 'act1-reveal') {
   return (
     <ActOneReveal
+  gameCode={gameCode}
+  playerNo={playerNo}
+  onInterrogation={() =>
+    setScreen('interrogation')
+  }
+/>
+  )
+}
+
+if (screen === 'interrogation') {
+  return (
+    <Interrogation
       gameCode={gameCode}
       playerNo={playerNo}
       onActTwo={() =>
