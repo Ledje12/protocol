@@ -3411,6 +3411,7 @@ function ActThreeLock({
 }) {
   const [code, setCode] = useState('')
   const [action, setAction] = useState(null)
+  const [stage, setStage] = useState(1)
   const [loading, setLoading] = useState(true)
   const [errorMessage, setErrorMessage] = useState('')
   const [submitting, setSubmitting] = useState(false)
@@ -3429,7 +3430,7 @@ function ActThreeLock({
         .eq('code', gameCode)
         .single()
 
-      if (error) {
+      if (error || !data) {
         console.error(error)
         setErrorMessage(
           'Impossible de préparer le verrou.'
@@ -3443,12 +3444,13 @@ function ActThreeLock({
         return
       }
 
+      setStage(data.act3_stage ?? 1)
+
       if (data.act3_action_id) {
         const existingAction =
           ACTION_LIBRARY.find(
             (item) =>
-              item.id ===
-              data.act3_action_id
+              item.id === data.act3_action_id
           )
 
         setAction(existingAction ?? null)
@@ -3457,17 +3459,17 @@ function ActThreeLock({
       }
 
       const candidates =
-  getEscalatedActions(
-    data.shared_profile,
-    data.used_action_ids ?? [],
-    data.act3_stage
-  )
+        getEscalatedActions(
+          data.shared_profile,
+          data.used_action_ids ?? [],
+          data.act3_stage ?? 1
+        )
 
       const selected =
         pickCompatibleAction(
           candidates,
           gameCode,
-          'lock'
+          `lock-${data.act3_stage ?? 1}`
         )
 
       if (!selected) {
@@ -3475,16 +3477,16 @@ function ActThreeLock({
         return
       }
 
-      const [stage, setStage] = useState(1)
-
-      const { data: registerData, error: registerError } =
-        await supabase.rpc(
-          'register_act3_action',
-          {
-            p_game_code: gameCode,
-            p_action_id: selected.id,
-          }
-        )
+      const {
+        data: registerData,
+        error: registerError,
+      } = await supabase.rpc(
+        'register_act3_action',
+        {
+          p_game_code: gameCode,
+          p_action_id: selected.id,
+        }
+      )
 
       if (registerError) {
         console.error(registerError)
@@ -3498,8 +3500,7 @@ function ActThreeLock({
       const registeredAction =
         ACTION_LIBRARY.find(
           (item) =>
-            item.id ===
-            registerData.action_id
+            item.id === registerData?.action_id
         )
 
       setAction(
@@ -3509,10 +3510,11 @@ function ActThreeLock({
       setLoading(false)
     }
 
-    setStage(data.act3_stage ?? 1)
-
     prepareLock()
-  }, [gameCode, onSolved])
+  }, [
+    gameCode,
+    onSolved,
+  ])
 
   useEffect(() => {
     const channel = supabase
@@ -3528,21 +3530,29 @@ function ActThreeLock({
           filter: `code=eq.${gameCode}`,
         },
         (payload) => {
+          const game = payload.new
+
           if (
-            payload.new.status ===
-            'act3_solved'
+            game.status === 'act3_solved'
           ) {
             onSolved()
+            return
           }
 
           if (
-            payload.new.act3_action_id
+            game.status === 'act3_between'
           ) {
+            onNextLock(
+              game.act3_stage ?? stage + 1
+            )
+            return
+          }
+
+          if (game.act3_action_id) {
             const selected =
               ACTION_LIBRARY.find(
                 (item) =>
-                  item.id ===
-                  payload.new.act3_action_id
+                  item.id === game.act3_action_id
               )
 
             if (selected) {
@@ -3560,6 +3570,8 @@ function ActThreeLock({
     gameCode,
     playerNo,
     onSolved,
+    onNextLock,
+    stage,
   ])
 
   async function submitCode() {
@@ -3584,19 +3596,19 @@ function ActThreeLock({
     }
 
     if (!data?.solved) {
-  setErrorMessage(
-    'Code incorrect. Réessayez.'
-  )
-  setSubmitting(false)
-  return
-}
+      setErrorMessage(
+        'Code incorrect. Réessayez.'
+      )
+      setSubmitting(false)
+      return
+    }
 
-if (data?.complete) {
-  onSolved()
-  return
-}
+    if (data?.complete) {
+      onSolved()
+      return
+    }
 
-onNextLock(data.stage)
+    onNextLock(data.stage)
   }
 
   if (loading) {
@@ -3622,7 +3634,9 @@ onNextLock(data.stage)
           THE PACT / ACTE III
         </p>
 
-        <h2>Le Verrou.</h2>
+        <h2>
+          Verrou {stage}.
+        </h2>
 
         {action ? (
           <>
