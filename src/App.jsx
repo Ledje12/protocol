@@ -573,7 +573,8 @@ function getActionDebugReport(profile, usedActionIds = []) {
 
 function getEscalatedActions(
   profile,
-  usedActionIds = []
+  usedActionIds = [],
+  stage = 1
 ) {
   const compatible =
     getCompatibleActions(
@@ -586,17 +587,49 @@ function getEscalatedActions(
     return []
   }
 
-  const maxAllowedIntensity =
+  const targetIntensity =
+    stage === 1
+      ? 3
+      : stage === 2
+        ? 4
+        : 5
+
+  const allowedTarget =
+    Math.min(
+      targetIntensity,
+      profile?.intensity ?? 1
+    )
+
+  let candidates =
+    compatible.filter(
+      (action) =>
+        action.intensity === allowedTarget
+    )
+
+  if (candidates.length > 0) {
+    return candidates
+  }
+
+  const lower =
+    compatible.filter(
+      (action) =>
+        action.intensity < allowedTarget
+    )
+
+  if (lower.length === 0) {
+    return compatible
+  }
+
+  const bestFallback =
     Math.max(
-      ...compatible.map(
+      ...lower.map(
         (action) => action.intensity
       )
     )
 
-  return compatible.filter(
+  return lower.filter(
     (action) =>
-      action.intensity ===
-      maxAllowedIntensity
+      action.intensity === bestFallback
   )
 }
 
@@ -3374,6 +3407,7 @@ function ActThreeLock({
   gameCode,
   playerNo,
   onSolved,
+  onNextLock,
 }) {
   const [code, setCode] = useState('')
   const [action, setAction] = useState(null)
@@ -3389,6 +3423,7 @@ function ActThreeLock({
           shared_profile,
           used_action_ids,
           act3_action_id,
+          act3_stage,
           status
         `)
         .eq('code', gameCode)
@@ -3422,10 +3457,11 @@ function ActThreeLock({
       }
 
       const candidates =
-        getEscalatedActions(
-          data.shared_profile,
-          data.used_action_ids ?? []
-        )
+  getEscalatedActions(
+    data.shared_profile,
+    data.used_action_ids ?? [],
+    data.act3_stage
+  )
 
       const selected =
         pickCompatibleAction(
@@ -3438,6 +3474,8 @@ function ActThreeLock({
         setLoading(false)
         return
       }
+
+      const [stage, setStage] = useState(1)
 
       const { data: registerData, error: registerError } =
         await supabase.rpc(
@@ -3470,6 +3508,8 @@ function ActThreeLock({
 
       setLoading(false)
     }
+
+    setStage(data.act3_stage ?? 1)
 
     prepareLock()
   }, [gameCode, onSolved])
@@ -3544,14 +3584,19 @@ function ActThreeLock({
     }
 
     if (!data?.solved) {
-      setErrorMessage(
-        'Code incorrect. Réessayez.'
-      )
-      setSubmitting(false)
-      return
-    }
+  setErrorMessage(
+    'Code incorrect. Réessayez.'
+  )
+  setSubmitting(false)
+  return
+}
 
-    onSolved()
+if (data?.complete) {
+  onSolved()
+  return
+}
+
+onNextLock(data.stage)
   }
 
   if (loading) {
@@ -3665,6 +3710,118 @@ function ActThreeLock({
   )
 }
 
+function ActThreeBetween({
+  gameCode,
+  stage,
+  playerNo,
+  onContinue,
+}) {
+  const [starting, setStarting] = useState(false)
+  const [errorMessage, setErrorMessage] = useState('')
+
+  useEffect(() => {
+    const channel = supabase
+      .channel(
+        `act3-between-${gameCode}-${playerNo}`
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'games',
+          filter: `code=eq.${gameCode}`,
+        },
+        (payload) => {
+          if (
+            payload.new.status ===
+            'act3_intro'
+          ) {
+            onContinue()
+          }
+        }
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [
+    gameCode,
+    playerNo,
+    onContinue,
+  ])
+
+  async function continueActThree() {
+    setStarting(true)
+    setErrorMessage('')
+
+    const { error } = await supabase.rpc(
+      'continue_act3',
+      {
+        p_game_code: gameCode,
+      }
+    )
+
+    if (error) {
+      console.error(error)
+      setErrorMessage(
+        'Impossible d’ouvrir le verrou suivant.'
+      )
+      setStarting(false)
+      return
+    }
+
+    onContinue()
+  }
+
+  return (
+    <main className="app">
+      <section className="card">
+        <p className="eyebrow">
+          THE PACT / ACTE III
+        </p>
+
+        <h2>Verrou ouvert.</h2>
+
+        <div className="protocol-box">
+          <p className="protocol-number">
+            NIVEAU {stage} AUTORISÉ
+          </p>
+
+          <p>
+            PROTOCOL augmente la pression.
+            Le verrou suivant sera moins indulgent.
+          </p>
+        </div>
+
+        {errorMessage && (
+          <p className="error-message">
+            {errorMessage}
+          </p>
+        )}
+
+        {playerNo === 1 ? (
+          <button
+            className="primary"
+            onClick={continueActThree}
+            disabled={starting}
+          >
+            {starting
+              ? 'Ouverture...'
+              : 'Continuer'}
+          </button>
+        ) : (
+          <div className="status">
+            <span className="status-dot"></span>
+            En attente du prochain verrou
+          </div>
+        )}
+      </section>
+    </main>
+  )
+}
+
 function ActThreeSolved() {
   return (
     <main className="app">
@@ -3699,6 +3856,7 @@ function App() {
   const [sharedProfile, setSharedProfile] = useState(null)
   const [act2Power, setAct2Power] = useState(null)
   const [act2BlindResult, setAct2BlindResult] = useState(null)
+  const [act3Stage, setAct3Stage] = useState(1)
 
   async function createGame() {
     const code = generateGameCode()
@@ -3940,12 +4098,29 @@ if (screen === 'act3-intro') {
 if (screen === 'act3-lock') {
   return (
     <ActThreeLock
-  gameCode={gameCode}
-  playerNo={playerNo}
-  onSolved={() =>
-    setScreen('act3-solved')
-  }
-/>
+      gameCode={gameCode}
+      playerNo={playerNo}
+      onNextLock={(stage) => {
+        setAct3Stage(stage)
+        setScreen('act3-between')
+      }}
+      onSolved={() =>
+        setScreen('act3-solved')
+      }
+    />
+  )
+}
+
+if (screen === 'act3-between') {
+  return (
+    <ActThreeBetween
+      gameCode={gameCode}
+      stage={act3Stage}
+      playerNo={playerNo}
+      onContinue={() =>
+        setScreen('act3-intro')
+      }
+    />
   )
 }
 
