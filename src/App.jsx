@@ -1092,14 +1092,11 @@ function Calibration({
   const [intensity, setIntensity] = useState(3)
 
   const [answers, setAnswers] = useState({
-    surprise: 1,
     control: 1,
-    surrender: 1,
     sensory: 1,
     restraint: 1,
-    competition: 1,
     provocation: 1,
-    improvisation: 1,
+    exploration: 1,
   })
 
   const [submitted, setSubmitted] = useState(false)
@@ -1107,47 +1104,37 @@ function Calibration({
   const [errorMessage, setErrorMessage] = useState('')
 
   const dimensions = [
-  {
-    key: 'surprise',
-    label: 'Surprise',
-    description: 'Instructions ou conséquences inattendues.',
-  },
-  {
-    key: 'control',
-    label: 'Contrôle',
-    description: 'Prendre temporairement le contrôle de certaines décisions ou règles.',
-  },
-  {
-    key: 'surrender',
-    label: 'Lâcher-prise',
-    description: 'Laisser temporairement votre partenaire prendre les commandes.',
-  },
-  {
-    key: 'sensory',
-    label: 'Sensoriel',
-    description: 'Défis basés sur le toucher, les sons ou l’anticipation.',
-  },
-  {
-    key: 'restraint',
-    label: 'Contraintes',
-    description: 'Restrictions ou limitations temporaires convenues.',
-  },
-  {
-    key: 'competition',
-    label: 'Compétition',
-    description: 'Gagner, perdre ou obtenir des avantages.',
-  },
-  {
-    key: 'provocation',
-    label: 'Provocation',
-    description: 'Taquiner, défier ou pousser le jeu plus loin.',
-  },
-  {
-    key: 'improvisation',
-    label: 'Improvisation',
-    description: 'Interactions moins scriptées et choix plus spontanés.',
-  },
-]
+    {
+      key: 'control',
+      label: 'Contrôle',
+      description:
+        'Diriger, lâcher prise, donner ou recevoir des consignes, jouer avec la permission ou l’obéissance.',
+    },
+    {
+      key: 'sensory',
+      label: 'Sensoriel',
+      description:
+        'Toucher, goût, anticipation, yeux fermés, massage et jeux sur les sensations.',
+    },
+    {
+      key: 'restraint',
+      label: 'Contraintes',
+      description:
+        'Positions imposées, immobilité, restrictions temporaires et accessoires de contrainte.',
+    },
+    {
+      key: 'provocation',
+      label: 'Provocation',
+      description:
+        'Défis, demandes directes, confidences, exposition, jeu de rôle et situations volontairement déstabilisantes.',
+    },
+    {
+      key: 'exploration',
+      label: 'Exploration',
+      description:
+        'Sortir davantage de vos habitudes : accessoires, jeux inhabituels, fétiches et expériences plus audacieuses.',
+    },
+  ]
 
   function updateAnswer(key, value) {
     setAnswers((current) => ({
@@ -1176,9 +1163,11 @@ function Calibration({
 
     if (error) {
       console.error(error)
+
       setErrorMessage(
-        'Calibration could not be submitted.'
+        'Impossible d’enregistrer votre calibration.'
       )
+
       setLoading(false)
       return
     }
@@ -1193,7 +1182,9 @@ function Calibration({
 
   useEffect(() => {
     const channel = supabase
-      .channel(`calibration-${gameCode}-${playerNo}`)
+      .channel(
+        `calibration-${gameCode}-${playerNo}`
+      )
       .on(
         'postgres_changes',
         {
@@ -1207,7 +1198,9 @@ function Calibration({
             payload.new.status ===
             'calibration_ready'
           ) {
-            onReady(payload.new.shared_profile)
+            onReady(
+              payload.new.shared_profile
+            )
           }
         }
       )
@@ -1216,7 +1209,11 @@ function Calibration({
     return () => {
       supabase.removeChannel(channel)
     }
-  }, [gameCode, playerNo, onReady])
+  }, [
+    gameCode,
+    playerNo,
+    onReady,
+  ])
 
   if (submitted) {
     return (
@@ -1226,16 +1223,18 @@ function Calibration({
             PROTOCOL / CALIBRATION
           </p>
 
-          <h2>Calibration validée.</h2>
+          <h2>Profil verrouillé.</h2>
 
-<p className="intro">
-  Vos réponses ont été enregistrées de manière privée.
-  En attente de votre partenaire.
-</p>
+          <p className="intro">
+            Vos réponses restent privées.
+            PROTOCOL ne conservera que votre
+            terrain de jeu commun.
+          </p>
 
           <div className="status">
             <span className="status-dot"></span>
-            En attente du joueur {playerNo === 1 ? '2' : '1'}
+            En attente du joueur{' '}
+            {playerNo === 1 ? '2' : '1'}
           </div>
         </section>
       </main>
@@ -1249,94 +1248,136 @@ function Calibration({
           PROTOCOL / CALIBRATION
         </p>
 
-        <h2>Définissez vos limites.</h2>
+        <h2>Définissez le terrain.</h2>
 
-<p className="intro">
-  Vos réponses sont privées.
-  Votre partenaire ne verra jamais vos choix individuels.
-</p>
+        <p className="intro">
+          Ne répondez pas pour ce que vous
+          accepteriez « en théorie ».
+          Définissez simplement ce qui correspond
+          à la partie de ce soir.
+        </p>
+
+        <div className="protocol-box">
+          <p className="protocol-number">
+            RÈGLE 00
+          </p>
+
+          <p>
+            Vos choix individuels ne seront jamais
+            montrés à votre partenaire.
+            PROTOCOL utilisera uniquement ce que
+            vous avez accepté tous les deux.
+          </p>
+        </div>
 
         <div className="calibration-section">
           <p className="calibration-label">
-  INTENSITÉ
-</p>
+            INTENSITÉ
+          </p>
 
-<p className="calibration-description">
-  Jusqu’où PROTOCOL peut-il aller dans la partie de ce soir ?
-</p>
+          <p className="calibration-description">
+            Jusqu’où voulez-vous laisser la partie
+            vous pousser ce soir ?
+          </p>
 
           <div className="intensity-grid">
-            {[1, 2, 3, 4, 5].map((value) => (
-              <button
-                key={value}
-                className={
-                  intensity === value
-                    ? 'choice-button selected'
-                    : 'choice-button'
-                }
-                onClick={() => setIntensity(value)}
-              >
-                {value}
-              </button>
-            ))}
+            {[1, 2, 3, 4, 5].map(
+              (value) => (
+                <button
+                  key={value}
+                  className={
+                    intensity === value
+                      ? 'choice-button selected'
+                      : 'choice-button'
+                  }
+                  onClick={() =>
+                    setIntensity(value)
+                  }
+                >
+                  {value}
+                </button>
+              )
+            )}
           </div>
+
+          <p className="warning-text">
+            1 = confortable · 3 = audacieux ·
+            5 = très direct
+          </p>
         </div>
 
-        {dimensions.map((dimension) => (
-          <div
-            className="calibration-section"
-            key={dimension.key}
-          >
-            <p className="calibration-label">
-              {dimension.label}
-            </p>
+        {dimensions.map(
+          (dimension) => (
+            <div
+              className="calibration-section"
+              key={dimension.key}
+            >
+              <p className="calibration-label">
+                {dimension.label}
+              </p>
 
-            <p className="calibration-description">
-              {dimension.description}
-            </p>
+              <p className="calibration-description">
+                {dimension.description}
+              </p>
 
-            <div className="answer-grid">
-              <button
-                className={
-                  answers[dimension.key] === 0
-                    ? 'choice-button selected'
-                    : 'choice-button'
-                }
-                onClick={() =>
-                  updateAnswer(dimension.key, 0)
-                }
-              >
-                Non
-              </button>
+              <div className="answer-grid">
+                <button
+                  className={
+                    answers[
+                      dimension.key
+                    ] === 0
+                      ? 'choice-button selected'
+                      : 'choice-button'
+                  }
+                  onClick={() =>
+                    updateAnswer(
+                      dimension.key,
+                      0
+                    )
+                  }
+                >
+                  Non
+                </button>
 
-              <button
-                className={
-                  answers[dimension.key] === 1
-                    ? 'choice-button selected'
-                    : 'choice-button'
-                }
-                onClick={() =>
-                  updateAnswer(dimension.key, 1)
-                }
-              >
-                Peut-être
-              </button>
+                <button
+                  className={
+                    answers[
+                      dimension.key
+                    ] === 1
+                      ? 'choice-button selected'
+                      : 'choice-button'
+                  }
+                  onClick={() =>
+                    updateAnswer(
+                      dimension.key,
+                      1
+                    )
+                  }
+                >
+                  Peut-être
+                </button>
 
-              <button
-                className={
-                  answers[dimension.key] === 2
-                    ? 'choice-button selected'
-                    : 'choice-button'
-                }
-                onClick={() =>
-                  updateAnswer(dimension.key, 2)
-                }
-              >
-                Oui
-              </button>
+                <button
+                  className={
+                    answers[
+                      dimension.key
+                    ] === 2
+                      ? 'choice-button selected'
+                      : 'choice-button'
+                  }
+                  onClick={() =>
+                    updateAnswer(
+                      dimension.key,
+                      2
+                    )
+                  }
+                >
+                  Oui
+                </button>
+              </div>
             </div>
-          </div>
-        ))}
+          )
+        )}
 
         {errorMessage && (
           <p className="error-message">
@@ -1350,8 +1391,8 @@ function Calibration({
           disabled={loading}
         >
           {loading
-  ? 'Validation...'
-  : 'Valider mes choix'}
+            ? 'Analyse...'
+            : 'Verrouiller mon profil'}
         </button>
       </section>
     </main>
