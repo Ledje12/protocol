@@ -558,6 +558,207 @@ const ACTION_LIBRARY = [
   },
 },
 
+{
+  id: 'v1_sensory_trace',
+  category: 'sensory',
+  group: 'initiative',
+  target: 'holder',
+  intensity: 2,
+  requires: {
+    sensory: 1,
+  },
+  title: 'Suivez la ligne',
+  text:
+    'Pendant 90 secondes, choisissez une seule zone du corps de votre partenaire et explorez-la lentement avec les doigts. Ne changez de zone que s’il vous le demande.',
+},
+
+{
+  id: 'v1_sensory_kiss_choice',
+  category: 'sensory',
+  group: 'initiative',
+  target: 'holder',
+  intensity: 2,
+  requires: {
+    sensory: 1,
+  },
+  title: 'Un seul endroit',
+  text:
+    'Choisissez un endroit précis sur le corps de votre partenaire et embrassez-le lentement pendant au moins trente secondes. Votre partenaire peut vous guider ou vous demander de changer.',
+},
+
+{
+  id: 'v1_provocation_finish_sentence',
+  category: 'provocation',
+  group: 'initiative',
+  target: 'holder',
+  intensity: 2,
+  requires: {
+    provocation: 1,
+  },
+  title: 'Complétez la phrase',
+  text:
+    'Regardez votre partenaire et complétez : « Ce que j’aimerais que tu fasses plus souvent quand on joue comme ça, c’est… » Ne justifiez pas votre réponse.',
+},
+
+{
+  id: 'v1_provocation_direct_request',
+  category: 'provocation',
+  group: 'initiative',
+  target: 'holder',
+  intensity: 3,
+  requires: {
+    provocation: 1,
+  },
+  title: 'Demandez-le',
+  text:
+    'Formulez une demande concrète que votre partenaire peut réaliser maintenant. Il répond uniquement : « oui », « autrement » ou « pas ce soir ».',
+},
+
+{
+  id: 'v1_control_three_choices',
+  category: 'control',
+  group: 'constraint',
+  target: 'partner',
+  intensity: 3,
+  requires: {
+    control: 1,
+  },
+  title: 'Trois décisions',
+  instructions: {
+    holder:
+      'Vous contrôlez les trois prochaines décisions : où votre partenaire se place, la proximité entre vous et qui initie le prochain contact.',
+    partner:
+      'Pour les trois prochaines décisions, laissez votre partenaire choisir votre position, votre proximité et qui initie le prochain contact. Vous pouvez modifier ou refuser chaque choix.',
+  },
+},
+
+{
+  id: 'v1_control_yes_otherwise',
+  category: 'control',
+  group: 'constraint',
+  target: 'partner',
+  intensity: 3,
+  requires: {
+    control: 1,
+    provocation: 1,
+  },
+  title: 'Oui ou autrement',
+  instructions: {
+    holder:
+      'Pendant deux minutes, formulez jusqu’à trois demandes précises. Votre partenaire répond uniquement : « oui », « autrement » ou « non ».',
+    partner:
+      'Pendant deux minutes, votre partenaire peut formuler jusqu’à trois demandes précises. Répondez uniquement : « oui », « autrement » ou « non ». Chaque réponse reste entièrement libre.',
+  },
+},
+
+{
+  id: 'v1_exploration_feet_service',
+  category: 'exploration',
+  group: 'constraint',
+  target: 'partner',
+  intensity: 4,
+  requires: {
+    exploration: 2,
+    control: 1,
+  },
+  title: 'À ses pieds',
+  instructions: {
+    holder:
+      'Installez-vous confortablement et choisissez un pied. Pendant deux minutes, guidez votre partenaire sur ce qui vous plaît : massage, baisers ou jeu plus suggestif.',
+    partner:
+      'Placez-vous devant votre partenaire. Pendant deux minutes, consacrez votre attention au pied qu’il choisit : massage, baisers, langue ou bouche selon ce qui vous convient tous les deux.',
+  },
+},
+
+{
+  id: 'v1_restraint_service_position',
+  category: 'restraint',
+  group: 'constraint',
+  target: 'partner',
+  intensity: 4,
+  requires: {
+    restraint: 2,
+    control: 1,
+  },
+  title: 'Position de service',
+  instructions: {
+    holder:
+      'Demandez à votre partenaire de se placer à quatre pattes pendant 90 secondes. Vous pouvez choisir une posture précise et utiliser son dos comme appui léger pour vos mains ou vos pieds, sans poids dangereux.',
+    partner:
+      'Placez-vous à quatre pattes pendant 90 secondes et laissez votre partenaire choisir votre posture. Il peut utiliser votre dos comme appui léger. Changez ou interrompez la position dès qu’elle devient inconfortable.',
+  },
+},
+
+{
+  id: 'v1_sensory_oil',
+  category: 'sensory',
+  group: 'initiative',
+  target: 'holder',
+  intensity: 3,
+  requires: {
+    sensory: 1,
+    exploration: 1,
+  },
+  title: 'Huile',
+  text:
+    'Si vous avez de l’huile de massage, consacrez cinq minutes à un massage lent. Votre partenaire choisit progressivement les zones qu’il souhaite voir massées. Sans huile, utilisez simplement vos mains.',
+},
+
+{
+  id: 'v1_sensory_isolation',
+  category: 'sensory',
+  group: 'constraint',
+  target: 'partner',
+  intensity: 4,
+  requires: {
+    sensory: 2,
+    exploration: 1,
+  },
+  title: 'Isolation',
+  instructions: {
+    holder:
+      'Pendant trois minutes, votre partenaire ferme les yeux ou utilise un bandeau. Si vous avez des écouteurs, ajoutez de la musique. Faites varier doucement les sensations par le toucher et éventuellement par une odeur ou un goût familier.',
+    partner:
+      'Pendant trois minutes, renoncez volontairement à la vue avec les yeux fermés ou un bandeau. Si possible, utilisez aussi de la musique dans des écouteurs. Laissez votre partenaire créer les sensations. Vous pouvez interrompre immédiatement la scène.',
+  },
+},
+
+{
+  id: 'v1_control_no_initiative',
+  category: 'control',
+  group: 'constraint',
+  target: 'partner',
+  intensity: 5,
+  requires: {
+    control: 2,
+    sensory: 2,
+    provocation: 2,
+  },
+  title: 'Aucune initiative',
+  instructions: {
+    holder:
+      'Pendant trois minutes, vous prenez toutes les initiatives dans la zone commune : proximité, position, rythme et prochain contact. Cherchez à obtenir une réaction claire plutôt qu’à aller vite.',
+    partner:
+      'Pendant trois minutes, ne prenez aucune nouvelle initiative. Laissez votre partenaire décider de la proximité, de la position et du rythme. Vous conservez à tout moment « oui », « autrement » et « stop ».',
+  },
+},
+
+{
+  id: 'v1_exploration_choose_focus',
+  category: 'exploration',
+  group: 'initiative',
+  target: 'holder',
+  intensity: 5,
+  requires: {
+    exploration: 2,
+    sensory: 2,
+    provocation: 2,
+  },
+  title: 'Choisissez votre obsession',
+  text:
+    'Choisissez une partie du corps de votre partenaire que vous voulez explorer pendant trois minutes. Dites-lui laquelle avant de commencer. Pendant ces trois minutes, restez concentré uniquement sur cette zone et adaptez-vous à ses réactions.',
+},
+
 ]
 
 function isActionAllowed(action, profile) {
@@ -586,12 +787,14 @@ function isActionAllowed(action, profile) {
 function getCompatibleActions(
   profile,
   group,
-  usedActionIds = []
+  usedActionIds = [],
+  rejectedActionIds = []
 ) {
   return ACTION_LIBRARY.filter(
     (action) =>
       action.group === group &&
       !usedActionIds.includes(action.id) &&
+      !rejectedActionIds.includes(action.id) &&
       isActionAllowed(action, profile)
   )
 }
@@ -636,14 +839,16 @@ function getActionDebugReport(profile, usedActionIds = []) {
 function getEscalatedActions(
   profile,
   usedActionIds = [],
-  stage = 1
+  stage = 1,
+  rejectedActionIds = []
 ) {
   const compatible =
-    getCompatibleActions(
-      profile,
-      'lock',
-      usedActionIds
-    )
+  getCompatibleActions(
+    profile,
+    'lock',
+    usedActionIds,
+    rejectedActionIds
+  )
 
   if (compatible.length === 0) {
     return []
@@ -3541,6 +3746,8 @@ function ActThreeLock({
   const [stage, setStage] = useState(1)
   const [activePlayer, setActivePlayer] = useState(1)
   const [skipped, setSkipped] = useState(false)
+  const [rejectedActionIds, setRejectedActionIds] = useState([])
+const [rerolling, setRerolling] = useState(false)
 
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
@@ -3552,13 +3759,14 @@ function ActThreeLock({
       const { data, error } = await supabase
         .from('games')
         .select(`
-          shared_profile,
-          used_action_ids,
-          act3_action_id,
-          act3_action_skipped,
-          act3_stage,
-          act1_advantage,
-          status
+            shared_profile,
+  used_action_ids,
+  rejected_action_ids,
+  act3_action_id,
+  act3_action_skipped,
+  act3_stage,
+  act1_advantage,
+  status
         `)
         .eq('code', gameCode)
         .single()
@@ -3599,6 +3807,10 @@ function ActThreeLock({
         data.act3_action_skipped ?? false
       )
 
+      setRejectedActionIds(
+  data.rejected_action_ids ?? []
+)
+
       /*
        * Une action existe déjà :
        * on la recharge simplement.
@@ -3623,11 +3835,12 @@ function ActThreeLock({
        * Nouvelle action pour ce verrou.
        */
       const candidates =
-        getEscalatedActions(
-          data.shared_profile,
-          data.used_action_ids ?? [],
-          currentStage
-        )
+  getEscalatedActions(
+    data.shared_profile,
+    data.used_action_ids ?? [],
+    currentStage,
+    data.rejected_action_ids ?? []
+  )
 
       const selected =
         pickCompatibleAction(
@@ -3747,6 +3960,120 @@ function ActThreeLock({
     onNextLock,
     stage,
   ])
+
+  async function rerollAction() {
+  if (!action) {
+    return
+  }
+
+  setRerolling(true)
+  setErrorMessage('')
+
+  const { error } = await supabase.rpc(
+    'reject_action',
+    {
+      p_game_code: gameCode,
+      p_action_id: action.id,
+    }
+  )
+
+  if (error) {
+    console.error(error)
+
+    setErrorMessage(
+      'Impossible de chercher une autre proposition.'
+    )
+
+    setRerolling(false)
+    return
+  }
+
+  const nextRejected = [
+    ...new Set([
+      ...rejectedActionIds,
+      action.id,
+    ]),
+  ]
+
+  setRejectedActionIds(nextRejected)
+
+  const { data: game, error: gameError } =
+    await supabase
+      .from('games')
+      .select(`
+        shared_profile,
+        used_action_ids,
+        act3_stage
+      `)
+      .eq('code', gameCode)
+      .single()
+
+  if (gameError || !game) {
+    console.error(gameError)
+
+    setErrorMessage(
+      'Impossible de préparer une nouvelle proposition.'
+    )
+
+    setRerolling(false)
+    return
+  }
+
+  const candidates =
+    getEscalatedActions(
+      game.shared_profile,
+      game.used_action_ids ?? [],
+      game.act3_stage ?? stage,
+      nextRejected
+    )
+
+  const selected =
+    pickCompatibleAction(
+      candidates,
+      `${gameCode}-${nextRejected.length}`,
+      `lock-${game.act3_stage ?? stage}`
+    )
+
+  if (!selected) {
+    setAction(null)
+    setRerolling(false)
+    return
+  }
+
+  const {
+    data: registerData,
+    error: registerError,
+  } = await supabase.rpc(
+    'register_act3_action',
+    {
+      p_game_code: gameCode,
+      p_action_id: selected.id,
+    }
+  )
+
+  if (registerError) {
+    console.error(registerError)
+
+    setErrorMessage(
+      'Impossible d’activer la nouvelle proposition.'
+    )
+
+    setRerolling(false)
+    return
+  }
+
+  const registered =
+    ACTION_LIBRARY.find(
+      (item) =>
+        item.id === registerData?.action_id
+    )
+
+  setAction(
+    registered ?? selected
+  )
+
+  setRerolling(false)
+}
 
   async function skipAction() {
     setSkipping(true)
