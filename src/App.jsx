@@ -759,6 +759,127 @@ const ACTION_LIBRARY = [
     'Choisissez une partie du corps de votre partenaire que vous voulez explorer pendant trois minutes. Dites-lui laquelle avant de commencer. Pendant ces trois minutes, restez concentré uniquement sur cette zone et adaptez-vous à ses réactions.',
 },
 
+{
+  id: 'finale_slow_reclaim',
+  category: 'sensory',
+  group: 'finale',
+  target: 'both',
+  intensity: 2,
+  requires: {
+    sensory: 1,
+  },
+  title: 'Reprendre le temps',
+  text:
+    'Pendant cinq minutes, oubliez les objectifs et les énigmes. À tour de rôle, choisissez une manière précise de toucher ou d’embrasser l’autre pendant une minute entière. Aucun changement avant la fin de la minute, sauf demande de votre partenaire.',
+},
+
+{
+  id: 'finale_direct_desire',
+  category: 'provocation',
+  group: 'finale',
+  target: 'both',
+  intensity: 3,
+  requires: {
+    provocation: 1,
+  },
+  title: 'Ne laissez rien implicite',
+  text:
+    'À tour de rôle, formulez une envie concrète pour les prochaines minutes. L’autre répond : « oui », « autrement » ou « pas ce soir ». Chaque demande acceptée devient immédiatement une partie de la scène.',
+},
+
+{
+  id: 'finale_guided_body',
+  category: 'sensory',
+  group: 'finale',
+  target: 'both',
+  intensity: 3,
+  requires: {
+    sensory: 1,
+    control: 1,
+  },
+  title: 'Montrez plutôt que demander',
+  text:
+    'Pendant cinq minutes, guidez physiquement la main ou la position de votre partenaire vers ce que vous souhaitez. Alternez les rôles à mi-parcours. Une modification ou un refus reste possible à chaque instant.',
+},
+
+{
+  id: 'finale_service_choice',
+  category: 'exploration',
+  group: 'finale',
+  target: 'partner',
+  intensity: 4,
+  requires: {
+    exploration: 2,
+    control: 1,
+  },
+  title: 'Service choisi',
+  instructions: {
+    holder:
+      'Choisissez pendant cinq minutes une forme de service corporel que vous souhaitez recevoir : massage, attention aux pieds, baisers ciblés ou autre interaction compatible avec votre terrain commun. Donnez des indications précises.',
+    partner:
+      'Pendant cinq minutes, consacrez-vous à la forme de service choisie par votre partenaire. Demandez seulement les précisions nécessaires et adaptez immédiatement la scène s’il souhaite modifier quelque chose.',
+  },
+},
+
+{
+  id: 'finale_blind_sequence',
+  category: 'sensory',
+  group: 'finale',
+  target: 'partner',
+  intensity: 4,
+  requires: {
+    sensory: 2,
+    exploration: 1,
+    control: 1,
+  },
+  title: 'Séquence privée',
+  instructions: {
+    holder:
+      'Pendant cinq minutes, votre partenaire garde les yeux fermés ou porte un bandeau. Construisez une séquence lente autour du toucher, de la proximité et, si vous le souhaitez tous les deux, du goût ou de l’odeur. Ne lui annoncez pas la prochaine sensation.',
+    partner:
+      'Fermez les yeux ou utilisez un bandeau pendant cinq minutes. Laissez votre partenaire construire la séquence. Vous pouvez à tout moment ouvrir les yeux, guider, modifier ou interrompre.',
+  },
+},
+
+{
+  id: 'finale_control_transfer',
+  category: 'control',
+  group: 'finale',
+  target: 'partner',
+  intensity: 5,
+  requires: {
+    control: 2,
+    sensory: 2,
+    provocation: 2,
+  },
+  title: 'Transfert de contrôle',
+  instructions: {
+    holder:
+      'Pendant cinq minutes, vous choisissez la position, la proximité, le rythme et l’ordre des interactions. Formulez vos choix clairement. Votre objectif n’est pas d’aller vite mais de construire une séquence cohérente.',
+    partner:
+      'Pendant cinq minutes, laissez votre partenaire prendre l’initiative sur la position, la proximité et le rythme. Vous gardez trois réponses disponibles à tout moment : « oui », « autrement » et « stop ».',
+  },
+},
+
+{
+  id: 'finale_service_intense',
+  category: 'exploration',
+  group: 'finale',
+  target: 'partner',
+  intensity: 5,
+  requires: {
+    exploration: 2,
+    control: 2,
+    provocation: 2,
+  },
+  title: 'À votre service',
+  instructions: {
+    holder:
+      'Pendant cinq minutes, choisissez une posture de service pour votre partenaire puis une attention corporelle précise que vous souhaitez recevoir. Vous pouvez changer une fois de demande pendant la séquence.',
+    partner:
+      'Pendant cinq minutes, adoptez la posture demandée puis concentrez-vous sur l’attention corporelle choisie par votre partenaire. Vous pouvez modifier ou refuser n’importe quelle partie de la scène.',
+  },
+},
 ]
 
 const QUESTION_LIBRARY = {
@@ -833,6 +954,7 @@ const QUESTION_LIBRARY = {
     placeholder:
       'Quelque chose d’un peu audacieux...',
   },
+  
 }
 
 function isActionAllowed(action, profile) {
@@ -5029,7 +5151,73 @@ function ActThreeBetween({
   )
 }
 
-function ActThreeSolved() {
+function ActThreeSolved({
+  gameCode,
+  playerNo,
+  onFinale,
+}) {
+  const [starting, setStarting] = useState(false)
+  const [errorMessage, setErrorMessage] = useState('')
+
+  useEffect(() => {
+    const channel = supabase
+      .channel(
+        `finale-start-${gameCode}-${playerNo}`
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'games',
+          filter: `code=eq.${gameCode}`,
+        },
+        (payload) => {
+          if (
+            payload.new.status === 'finale' ||
+            payload.new.status ===
+              'finale_complete'
+          ) {
+            onFinale()
+          }
+        }
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [
+    gameCode,
+    playerNo,
+    onFinale,
+  ])
+
+  async function startFinale() {
+    setStarting(true)
+    setErrorMessage('')
+
+    const { error } = await supabase.rpc(
+      'start_finale',
+      {
+        p_game_code: gameCode,
+      }
+    )
+
+    if (error) {
+      console.error(error)
+
+      setErrorMessage(
+        'Impossible d’ouvrir le Verdict.'
+      )
+
+      setStarting(false)
+      return
+    }
+
+    onFinale()
+  }
+
   return (
     <main className="app">
       <section className="card">
@@ -5037,7 +5225,9 @@ function ActThreeSolved() {
           THE PACT / ACTE III
         </p>
 
-        <h2>Les trois verrous sont ouverts.</h2>
+        <h2>
+          Les trois verrous sont ouverts.
+        </h2>
 
         <div className="protocol-box">
           <p className="protocol-number">
@@ -5045,11 +5235,460 @@ function ActThreeSolved() {
           </p>
 
           <p>
-            Les trois verrous ont été résolus.
-            PROTOCOL a validé votre progression
-            et ouvre maintenant la phase suivante.
+            Vous avez transmis suffisamment
+            d’informations.
+          </p>
+
+          <p>
+            PROTOCOL connaît maintenant
+            vos intentions, certaines de vos
+            envies et la manière dont vous
+            réagissez lorsque les règles
+            deviennent asymétriques.
           </p>
         </div>
+
+        <p className="intro">
+          Il reste une seule instruction.
+          Elle ne servira plus à mesurer
+          votre comportement.
+        </p>
+
+        <p className="intro">
+          Elle sera construite pour
+          conclure cette session.
+        </p>
+
+        {errorMessage && (
+          <p className="error-message">
+            {errorMessage}
+          </p>
+        )}
+
+        {playerNo === 1 ? (
+          <button
+            className="primary"
+            onClick={startFinale}
+            disabled={starting}
+          >
+            {starting
+              ? 'Analyse finale...'
+              : 'Recevoir le Verdict'}
+          </button>
+        ) : (
+          <div className="status">
+            <span className="status-dot"></span>
+            PROTOCOL prépare son Verdict
+          </div>
+        )}
+      </section>
+    </main>
+  )
+}
+
+function Finale({
+  gameCode,
+  playerNo,
+}) {
+  const [game, setGame] = useState(null)
+  const [action, setAction] = useState(null)
+  const [activePlayer, setActivePlayer] = useState(1)
+
+  const [loading, setLoading] = useState(true)
+  const [finishing, setFinishing] = useState(false)
+  const [errorMessage, setErrorMessage] = useState('')
+
+  async function loadFinale() {
+    const { data, error } = await supabase
+      .from('games')
+      .select(`
+        shared_profile,
+        used_action_ids,
+        rejected_action_ids,
+        finale_action_id,
+        finale_finished,
+        act1_advantage,
+        status
+      `)
+      .eq('code', gameCode)
+      .single()
+
+    if (error || !data) {
+      console.error(error)
+
+      setErrorMessage(
+        'Impossible de préparer le Verdict.'
+      )
+
+      setLoading(false)
+      return
+    }
+
+    setGame(data)
+
+    const controller =
+      data.act1_advantage ??
+      ((hashString(`${gameCode}-finale`) % 2) + 1)
+
+    setActivePlayer(controller)
+
+    if (
+      data.status === 'finale_complete' ||
+      data.finale_finished
+    ) {
+      setLoading(false)
+      return
+    }
+
+    if (data.finale_action_id) {
+      const existing =
+        ACTION_LIBRARY.find(
+          (item) =>
+            item.id === data.finale_action_id
+        )
+
+      setAction(existing ?? null)
+      setLoading(false)
+      return
+    }
+
+    const compatible =
+      getCompatibleActions(
+        data.shared_profile,
+        'finale',
+        data.used_action_ids ?? [],
+        data.rejected_action_ids ?? []
+      )
+
+    if (compatible.length === 0) {
+      setLoading(false)
+      return
+    }
+
+    /*
+     * Pour le final, on cherche le niveau
+     * le plus élevé compatible avec
+     * la calibration de la soirée.
+     */
+    const bestIntensity =
+      Math.max(
+        ...compatible.map(
+          (item) => item.intensity
+        )
+      )
+
+    const candidates =
+      compatible.filter(
+        (item) =>
+          item.intensity === bestIntensity
+      )
+
+    const selected =
+      pickCompatibleAction(
+        candidates,
+        gameCode,
+        'finale'
+      )
+
+    if (!selected) {
+      setLoading(false)
+      return
+    }
+
+    const {
+      data: registerData,
+      error: registerError,
+    } = await supabase.rpc(
+      'register_finale_action',
+      {
+        p_game_code: gameCode,
+        p_action_id: selected.id,
+      }
+    )
+
+    if (registerError) {
+      console.error(registerError)
+
+      setErrorMessage(
+        'Impossible de verrouiller le Verdict.'
+      )
+
+      setLoading(false)
+      return
+    }
+
+    const registered =
+      ACTION_LIBRARY.find(
+        (item) =>
+          item.id ===
+          registerData?.action_id
+      )
+
+    setAction(
+      registered ?? selected
+    )
+
+    setLoading(false)
+  }
+
+  useEffect(() => {
+    loadFinale()
+
+    const channel = supabase
+      .channel(
+        `finale-${gameCode}-${playerNo}`
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'games',
+          filter: `code=eq.${gameCode}`,
+        },
+        async (payload) => {
+          if (
+            payload.new.status ===
+            'finale_complete'
+          ) {
+            setGame(
+              (current) => ({
+                ...current,
+                status: 'finale_complete',
+                finale_finished: true,
+              })
+            )
+
+            return
+          }
+
+          if (
+            payload.new.finale_action_id
+          ) {
+            const selected =
+              ACTION_LIBRARY.find(
+                (item) =>
+                  item.id ===
+                  payload.new
+                    .finale_action_id
+              )
+
+            if (selected) {
+              setAction(selected)
+            }
+          }
+        }
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [
+    gameCode,
+    playerNo,
+  ])
+
+  async function finishFinale() {
+    setFinishing(true)
+    setErrorMessage('')
+
+    const { error } = await supabase.rpc(
+      'finish_finale',
+      {
+        p_game_code: gameCode,
+      }
+    )
+
+    if (error) {
+      console.error(error)
+
+      setErrorMessage(
+        'Impossible de clôturer THE PACT.'
+      )
+
+      setFinishing(false)
+      return
+    }
+
+    setGame(
+      (current) => ({
+        ...current,
+        status: 'finale_complete',
+        finale_finished: true,
+      })
+    )
+
+    setFinishing(false)
+  }
+
+  if (loading) {
+    return (
+      <main className="app">
+        <section className="card">
+          <p className="eyebrow">
+            THE PACT / VERDICT
+          </p>
+
+          <h2>
+            Composition de la dernière instruction...
+          </h2>
+        </section>
+      </main>
+    )
+  }
+
+  if (
+    game?.status === 'finale_complete' ||
+    game?.finale_finished
+  ) {
+    return (
+      <main className="app">
+        <section className="card">
+          <p className="eyebrow">
+            THE PACT / TERMINÉ
+          </p>
+
+          <h2>
+            Session terminée.
+          </h2>
+
+          <div className="protocol-box">
+            <p className="protocol-number">
+              ARCHIVE 01
+            </p>
+
+            <p>
+              Vous avez laissé PROTOCOL
+              observer vos intentions,
+              vos réponses et vos choix.
+            </p>
+
+            <p>
+              La prochaine session
+              ne suivra pas nécessairement
+              les mêmes règles.
+            </p>
+          </div>
+
+          <p className="intro">
+            THE PACT est terminé.
+            Le reste vous appartient.
+          </p>
+        </section>
+      </main>
+    )
+  }
+
+  if (!action) {
+    return (
+      <main className="app">
+        <section className="card">
+          <p className="eyebrow">
+            THE PACT / VERDICT
+          </p>
+
+          <h2>
+            Aucune instruction imposée.
+          </h2>
+
+          <p className="intro">
+            PROTOCOL n’a trouvé aucune
+            scène finale compatible avec
+            votre terrain commun.
+          </p>
+
+          {playerNo === 1 && (
+            <button
+              className="primary"
+              onClick={finishFinale}
+              disabled={finishing}
+            >
+              Terminer THE PACT
+            </button>
+          )}
+        </section>
+      </main>
+    )
+  }
+
+  let instruction =
+    action.text ?? ''
+
+  if (action.instructions) {
+    instruction =
+      playerNo === activePlayer
+        ? action.instructions.holder
+        : action.instructions.partner
+  }
+
+  return (
+    <main className="app">
+      <section className="card">
+        <p className="eyebrow">
+          THE PACT / VERDICT
+        </p>
+
+        <p className="protocol-number">
+          DERNIÈRE INSTRUCTION
+        </p>
+
+        <h2>{action.title}</h2>
+
+        <div className="result-box">
+          <span>Intensité</span>
+
+          <strong>
+            {action.intensity} / 5
+          </strong>
+        </div>
+
+        {action.instructions && (
+          <div className="result-box">
+            <span>Votre rôle</span>
+
+            <strong>
+              {playerNo === activePlayer
+                ? 'INITIATIVE'
+                : 'RÉPONSE'}
+            </strong>
+          </div>
+        )}
+
+        <div className="protocol-box">
+          <p>
+            {instruction}
+          </p>
+        </div>
+
+        <p className="warning-text">
+          Cette scène conclut THE PACT.
+          Elle peut être modifiée ou arrêtée
+          à tout moment.
+        </p>
+
+        {errorMessage && (
+          <p className="error-message">
+            {errorMessage}
+          </p>
+        )}
+
+        {playerNo === 1 ? (
+          <button
+            className="primary"
+            onClick={finishFinale}
+            disabled={finishing}
+          >
+            {finishing
+              ? 'Clôture...'
+              : 'Terminer THE PACT'}
+          </button>
+        ) : (
+          <div className="status">
+            <span className="status-dot"></span>
+            Dernière séquence active
+          </div>
+        )}
       </section>
     </main>
   )
@@ -5107,12 +5746,17 @@ function App() {
   }
 
   function goHome() {
-    setGameCode('')
-    setPlayerNo(null)
-    setSharedProfile(null)
-    setJoinedGame(null)
-    setScreen('home')
-  }
+  setGameCode('')
+  setPlayerNo(null)
+  setSharedProfile(null)
+  setJoinedGame(null)
+
+  setAct2Power(null)
+  setAct2BlindResult(null)
+  setAct3Stage(1)
+
+  setScreen('home')
+}
 
   if (screen === 'lobby') {
     return (
@@ -5345,7 +5989,22 @@ if (screen === 'act3-between') {
 
 if (screen === 'act3-solved') {
   return (
-    <ActThreeSolved />
+    <ActThreeSolved
+      gameCode={gameCode}
+      playerNo={playerNo}
+      onFinale={() =>
+        setScreen('finale')
+      }
+    />
+  )
+}
+
+if (screen === 'finale') {
+  return (
+    <Finale
+      gameCode={gameCode}
+      playerNo={playerNo}
+    />
   )
 }
 
