@@ -2312,17 +2312,19 @@ player2_success_rule,
           : data.player2_role
 
       const ownObjective =
-        playerNo === 1
-          ? data.player1_objective
-          : data.player2_objective
+  playerNo === 1
+    ? data.player1_objective
+    : data.player2_objective
 
-      setSuccessRule(
-  ownSuccessRule ?? ''
-)
+const ownSuccessRule =
+  playerNo === 1
+    ? data.player1_success_rule
+    : data.player2_success_rule
 
-      setResult(ownResult ?? 'pending')
-      setRole(ownRole ?? '')
-      setObjective(ownObjective ?? '')
+setResult(ownResult ?? 'pending')
+setRole(ownRole ?? '')
+setObjective(ownObjective ?? '')
+setSuccessRule(ownSuccessRule ?? '')
 
       setPartnerResolved(
         otherResult &&
