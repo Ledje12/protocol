@@ -496,6 +496,68 @@ const ACTION_LIBRARY = [
     'À tour de rôle, formulez clairement une envie que vous n’avez pas encore exprimée pendant la partie. L’autre répond uniquement : oui, peut-être, ou pas ce soir.',
 },
 
+{
+  id: 'lock_full_lead',
+  category: 'control',
+  group: 'lock',
+  target: 'partner',
+  intensity: 5,
+  requires: {
+    control: 2,
+    surrender: 2,
+    sensory: 2,
+    provocation: 2,
+  },
+  title: 'Contrôle total',
+  instructions: {
+    holder:
+      'Pendant le verrou, prenez l’initiative sur le rythme, la proximité et la manière dont l’interaction évolue dans votre zone commune. Cherchez à faire exprimer clairement à votre partenaire ce qu’il souhaite que vous poursuiviez.',
+    partner:
+      'Pendant le verrou, laissez votre partenaire prendre l’initiative sur le rythme et la proximité dans votre zone commune. Dites clairement ce que vous souhaitez qu’il poursuive, modifie ou arrête.',
+  },
+},
+
+{
+  id: 'lock_permission',
+  category: 'control',
+  group: 'lock',
+  target: 'partner',
+  intensity: 5,
+  requires: {
+    control: 2,
+    surrender: 2,
+    provocation: 2,
+  },
+  title: 'Sous permission',
+  instructions: {
+    holder:
+      'Jusqu’à l’ouverture du verrou, votre partenaire doit obtenir votre accord avant chaque changement important dans l’interaction. Répondez simplement oui, autrement ou non.',
+    partner:
+      'Jusqu’à l’ouverture du verrou, demandez l’accord de votre partenaire avant chaque changement important dans l’interaction. Une réponse différente de oui doit être respectée immédiatement.',
+  },
+},
+
+{
+  id: 'lock_blind_guidance',
+  category: 'sensory',
+  group: 'lock',
+  target: 'partner',
+  intensity: 5,
+  requires: {
+    sensory: 2,
+    surprise: 2,
+    surrender: 2,
+    control: 1,
+  },
+  title: 'Guidage',
+  instructions: {
+    holder:
+      'Pendant une courte séquence, guidez votre partenaire alors qu’il garde les yeux fermés. Restez uniquement dans les interactions déjà acceptées et interrompez immédiatement s’il le souhaite.',
+    partner:
+      'Pendant une courte séquence, gardez les yeux fermés et laissez votre partenaire vous guider dans les limites déjà établies. Vous pouvez ouvrir les yeux, modifier ou arrêter la règle à tout moment.',
+  },
+},
+
 ]
 
 function isActionAllowed(action, profile) {
@@ -3436,9 +3498,13 @@ function ActThreeLock({
   const [code, setCode] = useState('')
   const [action, setAction] = useState(null)
   const [stage, setStage] = useState(1)
+  const [activePlayer, setActivePlayer] = useState(1)
+  const [skipped, setSkipped] = useState(false)
+
   const [loading, setLoading] = useState(true)
-  const [errorMessage, setErrorMessage] = useState('')
   const [submitting, setSubmitting] = useState(false)
+  const [skipping, setSkipping] = useState(false)
+  const [errorMessage, setErrorMessage] = useState('')
 
   useEffect(() => {
     async function prepareLock() {
@@ -3448,7 +3514,9 @@ function ActThreeLock({
           shared_profile,
           used_action_ids,
           act3_action_id,
+          act3_action_skipped,
           act3_stage,
+          act1_advantage,
           status
         `)
         .eq('code', gameCode)
@@ -3468,32 +3536,63 @@ function ActThreeLock({
         return
       }
 
-      setStage(data.act3_stage ?? 1)
+      const currentStage =
+        data.act3_stage ?? 1
 
+      setStage(currentStage)
+
+      /*
+       * Si quelqu’un a gagné l’Avantage à l’Acte I,
+       * il devient le joueur actif.
+       *
+       * Sinon PROTOCOL choisit de façon
+       * déterministe à partir du code de partie.
+       */
+      const controller =
+        data.act1_advantage ??
+        ((hashString(gameCode) % 2) + 1)
+
+      setActivePlayer(controller)
+
+      setSkipped(
+        data.act3_action_skipped ?? false
+      )
+
+      /*
+       * Une action existe déjà :
+       * on la recharge simplement.
+       */
       if (data.act3_action_id) {
         const existingAction =
           ACTION_LIBRARY.find(
             (item) =>
-              item.id === data.act3_action_id
+              item.id ===
+              data.act3_action_id
           )
 
-        setAction(existingAction ?? null)
+        setAction(
+          existingAction ?? null
+        )
+
         setLoading(false)
         return
       }
 
+      /*
+       * Nouvelle action pour ce verrou.
+       */
       const candidates =
         getEscalatedActions(
           data.shared_profile,
           data.used_action_ids ?? [],
-          data.act3_stage ?? 1
+          currentStage
         )
 
       const selected =
         pickCompatibleAction(
           candidates,
           gameCode,
-          `lock-${data.act3_stage ?? 1}`
+          `lock-${currentStage}`
         )
 
       if (!selected) {
@@ -3524,7 +3623,8 @@ function ActThreeLock({
       const registeredAction =
         ACTION_LIBRARY.find(
           (item) =>
-            item.id === registerData?.action_id
+            item.id ===
+            registerData?.action_id
         )
 
       setAction(
@@ -3567,16 +3667,25 @@ function ActThreeLock({
             game.status === 'act3_between'
           ) {
             onNextLock(
-              game.act3_stage ?? stage + 1
+              game.act3_stage ??
+                stage + 1
             )
             return
           }
 
-          if (game.act3_action_id) {
+          setSkipped(
+            game.act3_action_skipped ??
+              false
+          )
+
+          if (
+            game.act3_action_id
+          ) {
             const selected =
               ACTION_LIBRARY.find(
                 (item) =>
-                  item.id === game.act3_action_id
+                  item.id ===
+                  game.act3_action_id
               )
 
             if (selected) {
@@ -3598,23 +3707,52 @@ function ActThreeLock({
     stage,
   ])
 
-  async function submitCode() {
-    setSubmitting(true)
+  async function skipAction() {
+    setSkipping(true)
     setErrorMessage('')
 
-    const { data, error } = await supabase.rpc(
-      'solve_act3',
+    const { error } = await supabase.rpc(
+      'skip_act3_action',
       {
         p_game_code: gameCode,
-        p_code: code,
       }
     )
 
     if (error) {
       console.error(error)
+
+      setErrorMessage(
+        'Impossible de passer cette contrainte.'
+      )
+
+      setSkipping(false)
+      return
+    }
+
+    setSkipped(true)
+    setSkipping(false)
+  }
+
+  async function submitCode() {
+    setSubmitting(true)
+    setErrorMessage('')
+
+    const { data, error } =
+      await supabase.rpc(
+        'solve_act3',
+        {
+          p_game_code: gameCode,
+          p_code: code,
+        }
+      )
+
+    if (error) {
+      console.error(error)
+
       setErrorMessage(
         'Impossible de vérifier le code.'
       )
+
       setSubmitting(false)
       return
     }
@@ -3623,6 +3761,7 @@ function ActThreeLock({
       setErrorMessage(
         'Code incorrect. Réessayez.'
       )
+
       setSubmitting(false)
       return
     }
@@ -3634,6 +3773,24 @@ function ActThreeLock({
 
     onNextLock(data.stage)
   }
+
+  /*
+   * Instruction privée affichée
+   * uniquement à ce téléphone.
+   */
+  let instruction = action?.text ?? ''
+
+  if (action?.instructions) {
+    instruction =
+      playerNo === activePlayer
+        ? action.instructions.holder
+        : action.instructions.partner
+  }
+
+  const playerRole =
+    playerNo === activePlayer
+      ? 'INITIATIVE'
+      : 'RÉPONSE'
 
   if (loading) {
     return (
@@ -3662,7 +3819,7 @@ function ActThreeLock({
           Verrou {stage}.
         </h2>
 
-        {action ? (
+        {action && !skipped ? (
           <>
             <div className="result-box">
               <span>
@@ -3674,22 +3831,56 @@ function ActThreeLock({
               </strong>
             </div>
 
+            {action.instructions && (
+              <div className="result-box">
+                <span>
+                  Votre position
+                </span>
+
+                <strong>
+                  {playerRole}
+                </strong>
+              </div>
+            )}
+
             <div className="protocol-box">
               <p className="protocol-number">
                 {action.title.toUpperCase()}
               </p>
 
               <p>
-                {action.text}
+                {instruction}
               </p>
             </div>
 
             <p className="warning-text">
-              Cette règle reste active jusqu’à
-              l’ouverture du verrou. Elle peut
-              toujours être interrompue ou passée.
+              Cette instruction est privée.
+              Votre partenaire peut avoir reçu
+              une règle différente.
             </p>
+
+            <button
+              className="tertiary-button"
+              onClick={skipAction}
+              disabled={skipping}
+            >
+              {skipping
+                ? 'Passage...'
+                : 'Passer cette contrainte'}
+            </button>
           </>
+        ) : skipped ? (
+          <div className="protocol-box">
+            <p className="protocol-number">
+              CONTRAINTE PASSÉE
+            </p>
+
+            <p>
+              La contrainte physique ou
+              relationnelle est désactivée.
+              L’énigme reste active.
+            </p>
+          </div>
         ) : (
           <div className="protocol-box">
             <p className="protocol-number">
