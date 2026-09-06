@@ -2453,32 +2453,39 @@ function ActOneReveal({
 
       if (error) {
         console.error(error)
+
         setErrorMessage(
           'Impossible de charger le résultat.'
         )
+
         setLoading(false)
         return
       }
 
       if (
-  data.status === 'interrogation' ||
-  data.status === 'interrogation_reveal' ||
-  data.status === 'interrogation_complete'
-) {
-  onInterrogation()
-  return
-}
+        data.status === 'interrogation' ||
+        data.status === 'interrogation_reveal' ||
+        data.status === 'interrogation_complete'
+      ) {
+        onInterrogation()
+        return
+      }
 
       setGame(data)
       setLoading(false)
     }
 
     loadResult()
-  }, [gameCode, onActTwo])
+  }, [
+    gameCode,
+    onInterrogation,
+  ])
 
   useEffect(() => {
     const channel = supabase
-      .channel(`act1-reveal-${gameCode}-${playerNo}`)
+      .channel(
+        `act1-reveal-${gameCode}-${playerNo}`
+      )
       .on(
         'postgres_changes',
         {
@@ -2488,11 +2495,14 @@ function ActOneReveal({
           filter: `code=eq.${gameCode}`,
         },
         (payload) => {
+          const status =
+            payload.new.status
+
           if (
-  data.status === 'interrogation' ||
-  data.status === 'interrogation_reveal' ||
-  data.status === 'interrogation_complete'
-) {
+            status === 'interrogation' ||
+            status === 'interrogation_reveal' ||
+            status === 'interrogation_complete'
+          ) {
             onInterrogation()
           }
         }
@@ -2502,32 +2512,36 @@ function ActOneReveal({
     return () => {
       supabase.removeChannel(channel)
     }
-  }, [gameCode, playerNo, onActTwo])
+  }, [
+    gameCode,
+    playerNo,
+    onInterrogation,
+  ])
 
   async function startInterrogation() {
-  setStarting(true)
-  setErrorMessage('')
+    setStarting(true)
+    setErrorMessage('')
 
-  const { error } = await supabase.rpc(
-    'start_interrogation',
-    {
-      p_game_code: gameCode,
-    }
-  )
-
-  if (error) {
-    console.error(error)
-
-    setErrorMessage(
-      'Impossible de lancer l’interrogatoire.'
+    const { error } = await supabase.rpc(
+      'start_interrogation',
+      {
+        p_game_code: gameCode,
+      }
     )
 
-    setStarting(false)
-    return
-  }
+    if (error) {
+      console.error(error)
 
-  onInterrogation()
-}
+      setErrorMessage(
+        'Impossible de lancer l’interrogatoire.'
+      )
+
+      setStarting(false)
+      return
+    }
+
+    onInterrogation()
+  }
 
   if (loading) {
     return (
@@ -2551,7 +2565,9 @@ function ActOneReveal({
             THE PACT / ERREUR
           </p>
 
-          <h2>Résultat indisponible.</h2>
+          <h2>
+            Résultat indisponible.
+          </h2>
 
           {errorMessage && (
             <p className="error-message">
@@ -2570,7 +2586,9 @@ function ActOneReveal({
           THE PACT / RÉVÉLATION
         </p>
 
-        <h2>Voici ce qui se jouait.</h2>
+        <h2>
+          Voici ce qui se jouait.
+        </h2>
 
         <div className="reveal-player">
           <p className="protocol-number">
@@ -2605,13 +2623,30 @@ function ActOneReveal({
         </div>
 
         <div className="result-box">
-          <span>Avantage</span>
+          <span>Ascendant détecté</span>
 
           <strong>
             {game.act1_advantage
               ? `Joueur ${game.act1_advantage}`
               : 'Aucun'}
           </strong>
+        </div>
+
+        <div className="protocol-box">
+          <p className="protocol-number">
+            ANALYSE 01
+          </p>
+
+          <p>
+            PROTOCOL sait maintenant
+            ce que vous avez tenté d’obtenir
+            l’un de l’autre.
+          </p>
+
+          <p>
+            Il lui manque encore ce que
+            vous n’avez pas essayé de montrer.
+          </p>
         </div>
 
         {errorMessage && (
@@ -2688,44 +2723,40 @@ function Interrogation({
     loadState()
 
     const channel = supabase
-      .channel(
-        `interrogation-${gameCode}-${playerNo}`
-      )
-      .on(
-        'postgres_changes',
-        {
-          event: 'UPDATE',
-          schema: 'public',
-          table: 'games',
-          filter: `code=eq.${gameCode}`,
-        },
-        async (payload) => {
-          if (
-            payload.new.status ===
-              'interrogation' ||
-            payload.new.status ===
-              'interrogation_reveal'
-          ) {
-            await loadState()
-          }
+  .channel(
+    `interrogation-${gameCode}-${playerNo}`
+  )
+  .on(
+    'postgres_changes',
+    {
+      event: 'UPDATE',
+      schema: 'public',
+      table: 'games',
+      filter: `code=eq.${gameCode}`,
+    },
+    async (payload) => {
+      if (
+        payload.new.status === 'interrogation' ||
+        payload.new.status === 'interrogation_reveal'
+      ) {
+        await loadState()
+      }
 
-          if (
-            payload.new.status ===
-            'interrogation_complete'
-          ) {
-            await loadState()
-          }
+      if (
+        payload.new.status ===
+        'interrogation_complete'
+      ) {
+        await loadState()
+      }
 
-          if (
-  payload.new.status === 'interrogation' ||
-  payload.new.status === 'interrogation_reveal' ||
-  payload.new.status === 'interrogation_complete'
-) {
-  onInterrogation()
-}
-        }
-      )
-      .subscribe()
+      if (
+        payload.new.status === 'act2_choice'
+      ) {
+        onActTwo()
+      }
+    }
+  )
+  .subscribe()
 
     return () => {
       supabase.removeChannel(channel)
