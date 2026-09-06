@@ -3332,6 +3332,7 @@ function ActThreeIntro({
 }) {
   const [clue, setClue] = useState('')
   const [loading, setLoading] = useState(true)
+  const [stage, setStage] = useState(1)
 
   useEffect(() => {
     async function loadClue() {
@@ -3342,7 +3343,10 @@ function ActThreeIntro({
 
       const { data, error } = await supabase
         .from('games')
-        .select(field)
+        .select(`
+  ${field},
+  act3_stage
+`)
         .eq('code', gameCode)
         .single()
 
@@ -3353,7 +3357,8 @@ function ActThreeIntro({
       }
 
       setClue(data[field])
-      setLoading(false)
+setStage(data.act3_stage ?? 1)
+setLoading(false)
     }
 
     loadClue()
@@ -3369,6 +3374,12 @@ function ActThreeIntro({
     )
   }
 
+  const stageTitles = {
+  1: 'La Transmission',
+  2: 'L’Interdit',
+  3: 'L’Aveu',
+}
+
   return (
     <main className="app">
       <section className="card">
@@ -3376,12 +3387,25 @@ function ActThreeIntro({
           THE PACT / ACTE III
         </p>
 
-        <h2>Le Verrou.</h2>
+        <h2>
+  {stageTitles[stage] ?? 'Le Verrou'}
+</h2>
+
+<div className="result-box">
+  <span>Verrou</span>
+  <strong>{stage} / 3</strong>
+</div>
 
         <p className="intro">
-          Vous détenez une partie de la solution.
-          Votre partenaire possède l’autre.
-        </p>
+  {stage === 1 &&
+    'Vous détenez chacun une partie de la transmission. Aucun écran ne contient la solution complète.'}
+
+  {stage === 2 &&
+    'L’un de vous possède les valeurs. L’autre possède la règle. Vous devrez obtenir ce qu’il vous manque.'}
+
+  {stage === 3 &&
+    'Le dernier verrou ne s’ouvrira pas uniquement avec de la logique. Une information devra être donnée à voix haute.'}
+</p>
 
         <div className="secret-box">
           {clue}
@@ -3844,7 +3868,7 @@ function ActThreeSolved() {
           THE PACT / ACTE III
         </p>
 
-        <h2>Verrou ouvert.</h2>
+        <h2>Les trois verrous sont ouverts.</h2>
 
         <div className="protocol-box">
           <p className="protocol-number">
@@ -3852,9 +3876,9 @@ function ActThreeSolved() {
           </p>
 
           <p>
-            Vous avez résolu le premier verrou.
-            PROTOCOL augmente maintenant
-            l’intensité.
+            Les trois verrous ont été résolus.
+            PROTOCOL a validé votre progression
+            et ouvre maintenant la phase suivante.
           </p>
         </div>
       </section>
